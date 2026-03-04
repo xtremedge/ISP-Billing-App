@@ -219,9 +219,32 @@ def list_customers(
     area_name: str = "",
     status: str = "",
     has_dues: str = "",
+    # ── NEW FILTERS ──────────────────────────────────────────────────────────
+    bill_status: str = "",   # "paid" | "unpaid" | "partial" | "overdue"
+    area_id: str = "",       # filter by area UUID directly
+    month: str = "",         # which month to evaluate bill_status against
+    # ─────────────────────────────────────────────────────────────────────────
     db: Session = Depends(get_db),
 ):
+    """
+    List customers with optional filters:
+
+    search      – full_name / username / mobile (case-insensitive contains)
+    area_name   – exact area name string
+    area_id     – exact area UUID
+    status      – customer account status: active / suspended / disconnected
+    has_dues    – "1" → only customers with at least one unpaid/partial bill
+    bill_status – filter by current-month bill payment state:
+                    "paid"    → customer has a paid bill this month
+                    "unpaid"  → customer has an unpaid bill this month
+                    "partial" → customer has a partially-paid bill this month
+                    "overdue" → customer has an overdue bill (any month)
+                    "no_bill" → customer has NO bill generated this month
+    month       – YYYY-MM to scope bill_status check (defaults to current month)
+    """
     q = db.query(Customer)
+
+    # ── text search ──────────────────────────────────────────────────────────
     if search:
         like = f"%{search}%"
         q = q.filter(
@@ -229,14 +252,64 @@ def list_customers(
             Customer.username.ilike(like) |
             Customer.mobile.ilike(like)
         )
+
+    # ── area filters (name takes priority over id) ───────────────────────────
     if area_name:
-        q = q.join(Area).filter(Area.name == area_name)
+        q = q.join(Area, Customer.area_id == Area.id).filter(Area.name == area_name)
+    elif area_id:
+        q = q.filter(Customer.area_id == area_id)
+
+    # ── account status ───────────────────────────────────────────────────────
     if status:
         q = q.filter(Customer.status == status)
+
     customers = q.order_by(Customer.full_name).all()
+
+    # ── has_dues (any unpaid/partial bill ever) ───────────────────────────────
     if has_dues == "1":
         customers = [c for c in customers if c.has_dues()]
+
+    # ── bill_status filter ────────────────────────────────────────────────────
+    if bill_status:
+        target_month = month if month else date.today().strftime("%Y-%m")
+
+        if bill_status == "paid":
+            # Customer has a PAID bill in the target month
+            customers = [
+                c for c in customers
+                if any(b.month == target_month and b.status == "paid" for b in c.bills)
+            ]
+
+        elif bill_status == "unpaid":
+            # Customer has an UNPAID bill in the target month
+            customers = [
+                c for c in customers
+                if any(b.month == target_month and b.status == "unpaid" for b in c.bills)
+            ]
+
+        elif bill_status == "partial":
+            # Customer has a PARTIALLY-PAID bill in the target month
+            customers = [
+                c for c in customers
+                if any(b.month == target_month and b.status == "partial" for b in c.bills)
+            ]
+
+        elif bill_status == "overdue":
+            # Customer has at least one overdue bill (any month)
+            customers = [
+                c for c in customers
+                if any(b.is_overdue() for b in c.bills)
+            ]
+
+        elif bill_status == "no_bill":
+            # Customer has NO bill generated for the target month at all
+            customers = [
+                c for c in customers
+                if not any(b.month == target_month for b in c.bills)
+            ]
+
     return [c.to_dict() for c in customers]
+
 
 @app.get("/api/customers/{cust_id}")
 def get_customer(cust_id: str, db: Session = Depends(get_db)):
@@ -371,12 +444,11 @@ def update_bill(bill_id: str, data: BillIn, db: Session = Depends(get_db)):
         bill.package_fee = data.package_fee
     if data.due_date:
         bill.due_date = date.fromisoformat(data.due_date)
-    if data.status:
-        bill.status = data.status
     if data.notes is not None:
         bill.notes = data.notes
     db.commit(); db.refresh(bill)
     return bill.to_dict()
+
 @app.get("/api/bills")
 def list_bills(
     search: str = "",
@@ -541,7 +613,6 @@ import qrcode
 from reportlab.lib.utils import ImageReader
 
 def _make_qr_image(data_str: str, box_size: int = 6):
-    """Generate a QR code PIL image from a string."""
     qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M,
                         box_size=box_size, border=2)
     qr.add_data(data_str)
@@ -549,7 +620,6 @@ def _make_qr_image(data_str: str, box_size: int = 6):
     return qr.make_image(fill_color="black", back_color="white").get_image()
 
 def _qr_flowable(data_str: str, size: float = 3.5*cm):
-    """Return a ReportLab Image flowable from QR data."""
     from reportlab.platypus import Image as RLImage
     img = _make_qr_image(data_str)
     buf = io.BytesIO()
@@ -558,7 +628,6 @@ def _qr_flowable(data_str: str, size: float = 3.5*cm):
     return RLImage(buf, width=size, height=size)
 
 def _payment_info_elems(s, style_h2, style_body):
-    """Build 'How to Pay' flowable elements from ISP settings."""
     elems = []
     lines = []
     if s.jazzcash_account:
@@ -580,7 +649,7 @@ def _payment_info_elems(s, style_h2, style_body):
     return elems
 
 
-# ─── PDF BILL (SINGLE) ───────────────────────────────────────────────────────
+# ─── PDF BILL (SINGLE) ────────────────────────────────────────────────────────
 @app.get("/api/bills/{bill_id}/pdf")
 def generate_pdf(bill_id: str, db: Session = Depends(get_db)):
     bill = db.query(Bill).get(bill_id)
@@ -607,12 +676,9 @@ def generate_pdf(bill_id: str, db: Session = Depends(get_db)):
     foot = ParagraphStyle("foot", fontSize=8, textColor=colors.grey, alignment=TA_CENTER)
 
     elems = []
-
-    # QR code data
     qr_data = f"BILL:{bill.id[:8].upper()}|AMT:{bill.total_amount:.0f}|STATUS:{bill.status.upper()}"
-    qr_img = _qr_flowable(qr_data, size=2.8*cm)
+    qr_img  = _qr_flowable(qr_data, size=2.8*cm)
 
-    # Header with QR
     hdr = Table([
         [Paragraph(f"<b>{s.isp_name}</b>", h1),
          Paragraph(f"<b>INVOICE</b><br/><font size=9>#{bill.id[:8].upper()}</font>", rt),
@@ -623,11 +689,9 @@ def generate_pdf(bill_id: str, db: Session = Depends(get_db)):
     elems += [hdr, HRFlowable(width="100%", thickness=2, color=colors.HexColor("#00a8cc")),
               Spacer(1, 0.3*cm)]
 
-    # Stamp
     stamp = "✓  PAID" if bill.status == "paid" else ("⚠  OVERDUE" if bill.is_overdue() else "UNPAID")
     elems += [Paragraph(stamp, stamp_style), Spacer(1, 0.3*cm)]
 
-    # Info grid
     info = [
         ["Customer",  cust.full_name,       "Bill Month", bill.month],
         ["Username",  cust.username,         "Due Date",   str(bill.due_date or "—")],
@@ -649,7 +713,6 @@ def generate_pdf(bill_id: str, db: Session = Depends(get_db)):
     ]))
     elems += [itbl, Spacer(1, 0.4*cm)]
 
-    # Charges
     elems.append(Paragraph("Charges Breakdown", h2))
     elems.append(Spacer(1, 0.15*cm))
     rows = [["#", "Description", "Date", "Status", "Amount"]]
@@ -680,7 +743,6 @@ def generate_pdf(bill_id: str, db: Session = Depends(get_db)):
     ]))
     elems += [ctbl, Spacer(1, 0.4*cm)]
 
-    # Payments
     if bill.payments:
         elems.append(Paragraph("Payment History", h2))
         elems.append(Spacer(1, 0.15*cm))
@@ -699,10 +761,8 @@ def generate_pdf(bill_id: str, db: Session = Depends(get_db)):
         ]))
         elems.append(ptbl)
 
-    # How to Pay section
     elems += [Spacer(1, 0.3*cm)]
     elems += _payment_info_elems(s, h2, body_style)
-
     elems += [Spacer(1, 0.3*cm),
               HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cccccc")),
               Spacer(1, 0.2*cm),
@@ -718,7 +778,6 @@ def generate_pdf(bill_id: str, db: Session = Depends(get_db)):
 # ─── PDF CUSTOMER CONSOLIDATED ────────────────────────────────────────────────
 @app.get("/api/customers/{cust_id}/bill-pdf")
 def generate_customer_bill_pdf(cust_id: str, db: Session = Depends(get_db)):
-    """Generate a single A4 PDF with all unpaid/partial bills for a customer."""
     cust = db.query(Customer).get(cust_id)
     if not cust: raise HTTPException(404, "Customer not found")
     s = db.query(ISPSettings).get(1) or ISPSettings()
@@ -749,7 +808,6 @@ def generate_customer_bill_pdf(cust_id: str, db: Session = Depends(get_db)):
 
     elems = []
 
-    # ── Header ──
     hdr = Table([[Paragraph(f"<b>{s.isp_name}</b>", h1),
                   Paragraph(f"<b>CUSTOMER BILL STATEMENT</b>", rt)]],
                 colWidths=[10*cm, 7*cm])
@@ -757,7 +815,6 @@ def generate_customer_bill_pdf(cust_id: str, db: Session = Depends(get_db)):
     elems += [hdr, HRFlowable(width="100%", thickness=2, color=colors.HexColor("#00a8cc")),
               Spacer(1, 0.3*cm)]
 
-    # ── Customer info ──
     total_due = sum(b.remaining_due() for b in unpaid_bills)
     cinfo = [
         ["Customer",  cust.full_name,       "Total Unpaid Bills", str(len(unpaid_bills))],
@@ -776,11 +833,8 @@ def generate_customer_bill_pdf(cust_id: str, db: Session = Depends(get_db)):
         ("PADDING",     (0,0), (-1,-1), 6),
     ]))
     elems += [citbl, Spacer(1, 0.4*cm)]
-
-    # ── Outstanding stamp ──
     elems += [Paragraph(f"⚠  TOTAL DUE: PKR {total_due:,.0f}", stamp_red), Spacer(1, 0.4*cm)]
 
-    # ── Bills table with QR codes ──
     elems.append(Paragraph("Unpaid Bills Detail", h2))
     elems.append(Spacer(1, 0.15*cm))
 
@@ -790,13 +844,11 @@ def generate_customer_bill_pdf(cust_id: str, db: Session = Depends(get_db)):
         qr = _qr_flowable(qr_data, size=1.8*cm)
         status_text = "OVERDUE" if b.is_overdue() else b.status.upper()
         bill_rows.append([
-            b.month,
-            str(b.due_date or "—"),
+            b.month, str(b.due_date or "—"),
             f"PKR {b.total_amount:,.0f}",
             f"PKR {b.amount_paid:,.0f}" if b.amount_paid > 0 else "—",
             f"PKR {b.remaining_due():,.0f}",
-            status_text,
-            qr,
+            status_text, qr,
         ])
 
     btbl = Table(bill_rows, colWidths=[2*cm, 2.2*cm, 2.5*cm, 2.2*cm, 2.5*cm, 2*cm, 2.2*cm])
@@ -819,7 +871,6 @@ def generate_customer_bill_pdf(cust_id: str, db: Session = Depends(get_db)):
     btbl.setStyle(TableStyle(btbl_style))
     elems += [btbl, Spacer(1, 0.3*cm)]
 
-    # ── Charges detail per bill ──
     for b in unpaid_bills:
         if b.charges:
             elems.append(Paragraph(f"Extra Charges — {b.month}", h3))
@@ -838,11 +889,9 @@ def generate_customer_bill_pdf(cust_id: str, db: Session = Depends(get_db)):
             ]))
             elems += [chtbl, Spacer(1, 0.2*cm)]
 
-    # ── Summary total ──
     elems.append(Spacer(1, 0.2*cm))
-    summary = Table([
-        ["", "", "Grand Total Due:", f"PKR {total_due:,.0f}"]
-    ], colWidths=[5*cm, 5*cm, 3.5*cm, 3.5*cm])
+    summary = Table([["", "", "Grand Total Due:", f"PKR {total_due:,.0f}"]],
+                    colWidths=[5*cm, 5*cm, 3.5*cm, 3.5*cm])
     summary.setStyle(TableStyle([
         ("BACKGROUND",  (2,0), (-1,0), colors.HexColor("#fff3cd")),
         ("FONTNAME",    (2,0), (-1,0), "Helvetica-Bold"),
@@ -852,11 +901,7 @@ def generate_customer_bill_pdf(cust_id: str, db: Session = Depends(get_db)):
         ("PADDING",     (0,0), (-1,-1), 8),
     ]))
     elems += [summary, Spacer(1, 0.4*cm)]
-
-    # ── How to Pay ──
     elems += _payment_info_elems(s, h2, body)
-
-    # ── Footer ──
     elems += [Spacer(1, 0.3*cm),
               HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cccccc")),
               Spacer(1, 0.2*cm),
@@ -870,6 +915,7 @@ def generate_customer_bill_pdf(cust_id: str, db: Session = Depends(get_db)):
     fname = f"Bills_{cust.username}_unpaid.pdf"
     return StreamingResponse(buf, media_type="application/pdf",
                              headers={"Content-Disposition": f'inline; filename="{fname}"'})
+
 
 # ─── STATIC FILES & INDEX ─────────────────────────────────────────────────────
 import os as _os
