@@ -1,0 +1,195 @@
+"""
+NetPulse ISP Billing — Desktop Application Entry Point
+PyQt6 window embedding a WebEngine that loads the FastAPI + HTML UI.
+"""
+import sys
+import time
+import threading
+import requests
+
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout,
+    QSplashScreen, QLabel, QProgressBar
+)
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEngineSettings, QWebEngineProfile, QWebEnginePage
+from PyQt6.QtCore import QUrl, Qt, QTimer, pyqtSignal, QObject, QSize
+from PyQt6.QtGui import QPixmap, QColor, QPainter, QFont, QIcon
+
+from app.api.server import start_server, PORT
+
+
+# ─── CUSTOM PAGE (allow opening wa.me links in default browser) ───────────────
+from PyQt6.QtCore import QUrl
+from PyQt6.QtGui import QDesktopServices
+
+class NetPulsePage(QWebEnginePage):
+    def acceptNavigationRequest(self, url: QUrl, nav_type, is_main_frame):
+        href = url.toString()
+        # Open external links (WhatsApp, SMS, mailto) in system browser
+        if href.startswith("https://wa.me") or href.startswith("sms:") or href.startswith("mailto:"):
+            QDesktopServices.openUrl(url)
+            return False
+        return super().acceptNavigationRequest(url, nav_type, is_main_frame)
+
+
+# ─── SPLASH SCREEN ───────────────────────────────────────────────────────────
+class SplashScreen(QSplashScreen):
+    def __init__(self):
+        # Create a gradient splash pixmap
+        pix = QPixmap(520, 300)
+        pix.fill(QColor("#0a0e1a"))
+        painter = QPainter(pix)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Background glow
+        painter.setBrush(QColor(0, 212, 255, 18))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(20, 20, 200, 200)
+
+        # Logo box
+        painter.setBrush(QColor(0, 100, 200))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(210, 60, 100, 100, 20, 20)
+
+        # ISP icon text
+        painter.setPen(QColor("#ffffff"))
+        f = QFont("Arial", 42)
+        painter.setFont(f)
+        painter.drawText(225, 130, "📡")
+
+        # App name
+        painter.setPen(QColor("#00d4ff"))
+        f2 = QFont("Arial", 26, QFont.Weight.Bold)
+        painter.setFont(f2)
+        painter.drawText(0, 200, 520, 40, Qt.AlignmentFlag.AlignCenter, "SS NET ISP")
+
+        # Subtitle
+        painter.setPen(QColor("#8892a4"))
+        f3 = QFont("Arial", 11)
+        painter.setFont(f3)
+        painter.drawText(0, 235, 520, 30, Qt.AlignmentFlag.AlignCenter, "Billing Management System")
+
+        painter.end()
+        super().__init__(pix)
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
+
+        self._progress = QProgressBar(self)
+        self._progress.setGeometry(60, 270, 400, 8)
+        self._progress.setRange(0, 100)
+        self._progress.setValue(0)
+        self._progress.setTextVisible(False)
+        self._progress.setStyleSheet("""
+            QProgressBar { background:#1a2236; border-radius:4px; border:none; }
+            QProgressBar::chunk { background:#00d4ff; border-radius:4px; }
+        """)
+
+        self._label = QLabel("Starting server...", self)
+        self._label.setGeometry(0, 252, 520, 20)
+        self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._label.setStyleSheet("color:#8892a4; font-size:11px;")
+
+    def set_progress(self, value: int, msg: str = ""):
+        self._progress.setValue(value)
+        if msg:
+            self._label.setText(msg)
+        QApplication.processEvents()
+
+
+# ─── MAIN WINDOW ─────────────────────────────────────────────────────────────
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("SS Net ISP Billing")
+        self.setMinimumSize(1200, 760)
+        self.resize(1440, 900)
+
+        # Centre on screen
+        screen = QApplication.primaryScreen().geometry()
+        x = (screen.width()  - 1440) // 2
+        y = (screen.height() -  900) // 2
+        self.move(x, y)
+
+        # WebEngine
+        self.profile = QWebEngineProfile("netpulse", self)
+        self.page    = NetPulsePage(self.profile, self)
+        self.browser = QWebEngineView(self)
+        self.browser.setPage(self.page)
+
+        # Settings
+        s = self.page.settings()
+        s.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled,          True)
+        s.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled,         True)
+        s.setAttribute(QWebEngineSettings.WebAttribute.AllowRunningInsecureContent, True)
+        s.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows,    True)
+
+        self.setCentralWidget(self.browser)
+
+    def load_app(self):
+        url = QUrl(f"http://127.0.0.1:{PORT}/")
+        self.browser.setUrl(url)
+
+
+# ─── SERVER READY CHECK ──────────────────────────────────────────────────────
+def wait_for_server(timeout=30) -> bool:
+    """Poll until FastAPI is responding."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            r = requests.get(f"http://127.0.0.1:{PORT}/api/settings", timeout=1)
+            if r.status_code in (200, 422):
+                return True
+        except Exception:
+            pass
+        time.sleep(0.2)
+    return False
+
+
+# ─── APPLICATION BOOTSTRAP ───────────────────────────────────────────────────
+def main():
+    # High-DPI
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+
+    app = QApplication(sys.argv)
+    app.setApplicationName("NetPulse ISP")
+    app.setOrganizationName("NetPulse")
+
+    # Splash
+    splash = SplashScreen()
+    splash.show()
+    splash.set_progress(5, "Initializing database...")
+    QApplication.processEvents()
+
+    # Start embedded FastAPI server
+    splash.set_progress(20, "Starting API server...")
+    start_server()
+
+    # Wait until server is ready
+    splash.set_progress(40, "Waiting for server...")
+    for i in range(40, 85):
+        try:
+            r = requests.get(f"http://127.0.0.1:{PORT}/api/settings", timeout=0.5)
+            if r.status_code in (200, 422, 404):
+                break
+        except Exception:
+            pass
+        time.sleep(0.08)
+        splash.set_progress(i, "Starting API server...")
+
+    splash.set_progress(90, "Loading application...")
+
+    # Main window
+    window = MainWindow()
+    window.load_app()
+
+    splash.set_progress(100, "Ready!")
+    time.sleep(0.4)
+    splash.finish(window)
+    window.show()
+
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

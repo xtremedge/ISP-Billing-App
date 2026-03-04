@@ -1,0 +1,12 @@
+PyQt6==6.7.1
+PyQt6-WebEngine==6.7.0
+fastapi==0.115.0
+uvicorn==0.30.6
+sqlalchemy==2.0.35
+alembic==1.13.3
+reportlab==4.2.5
+qrcode[pil]==8.0
+python-multipart==0.0.12
+aiofiles==24.1.0
+pyinstaller==6.19.0
+requests==2.32.5
