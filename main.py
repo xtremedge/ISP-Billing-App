@@ -2,6 +2,19 @@
 SS Net ISP Billing — Desktop Application Entry Point
 PyQt6 window embedding a WebEngine that loads the FastAPI + HTML UI.
 """
+import warnings
+# Suppress requests/urllib3 dependency warnings before imports
+try:
+    import urllib3
+    warnings.simplefilter('ignore', urllib3.exceptions.DependencyWarning)
+except (ImportError, AttributeError):
+    pass
+try:
+    from requests.packages.urllib3.exceptions import DependencyWarning
+    warnings.simplefilter('ignore', DependencyWarning)
+except (ImportError, AttributeError):
+    pass
+
 import os
 os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
     "--disable-features=Translate,OptimizationHints "
@@ -147,28 +160,38 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(self.browser)
 
+    def closeEvent(self, event):
+        # Explicitly clean up WebEngine items to avoid the "page still not deleted" warning
+        self.browser.setPage(None)
+        self.page.deleteLater()
+        self.profile.deleteLater()
+        super().closeEvent(event)
+
     def load_app(self):
         url = QUrl(f"http://127.0.0.1:{PORT}/")
         self.browser.setUrl(url)
 
 
 # ─── SERVER READY CHECK ──────────────────────────────────────────────────────
-def wait_for_server(timeout=30) -> bool:
+def wait_for_server(timeout=10) -> bool:
     """Poll until FastAPI is responding."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            r = requests.get(f"http://127.0.0.1:{PORT}/api/settings", timeout=1)
+            r = requests.get(f"http://127.0.0.1:{PORT}/api/settings", timeout=0.8)
             if r.status_code in (200, 422):
                 return True
         except Exception:
             pass
-        time.sleep(0.2)
+        time.sleep(0.15)
     return False
 
 
 # ─── APPLICATION BOOTSTRAP ───────────────────────────────────────────────────
 def main():
+    # Base path for resources (PyInstaller support)
+    base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+
     # High-DPI
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)

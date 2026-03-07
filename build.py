@@ -86,6 +86,34 @@ def generate_user_manual_pdf(path: str) -> None:
     c.save()
 
 
+def generate_installation_guide_pdf(path: str) -> None:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    c = canvas.Canvas(path, pagesize=A4)
+    width, height = A4
+    y = height - 50
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(50, y, "SS Net ISP - INSTALLATION GUIDE")
+    y -= 30
+    c.setFont("Helvetica", 10)
+    steps = [
+        "1. Requirement: Ensure you have Windows 10 or 11.",
+        "2. Step 1: Run 'SSNetISP_Setup_v1.0.0.exe' (the installer).",
+        "3. Step 2: Accept the license agreement if prompted.",
+        "4. Step 3: Choose the installation directory (Default recommended).",
+        "5. Step 4: Check 'Create a desktop icon' for quick access.",
+        "6. Step 5: Click 'Finish' to launch the application.",
+        "",
+        "Note: The application stores data in your user profile (~/.ssnet).",
+        "Uninstalling the app will NOT delete your customer database."
+    ]
+    for step in steps:
+        c.drawString(50, y, step)
+        y -= 18
+    c.showPage()
+    c.save()
+
+
 def main() -> None:
     os_name = platform.system()
     print("\n" + "=" * 64)
@@ -115,9 +143,11 @@ def main() -> None:
         sys.exit(1)
 
     manual_paths = []
+    guide_paths = []
     if os_name == "Windows":
         out_dir = os.path.join("dist", "SSNetISP")
         manual_paths.append(os.path.join(out_dir, "User_Manual.pdf"))
+        guide_paths.append(os.path.join(out_dir, "Installation_Guide.pdf"))
     elif os_name == "Darwin":
         app_bundle = os.path.join("dist", "SS Net ISP.app")
         manual_paths.append(os.path.join(app_bundle, "Contents", "Resources", "User_Manual.pdf"))
@@ -129,13 +159,21 @@ def main() -> None:
     for mp in manual_paths:
         generate_user_manual_pdf(mp)
         print(f"  added manual: {mp}")
+    
+    for gp in guide_paths:
+        generate_installation_guide_pdf(gp)
+        print(f"  added guide: {gp}")
 
     print("\n" + "=" * 64)
     print("  Build complete")
     print("=" * 64)
     if os_name == "Windows":
-        print("Output: dist/SSNetISP/SSNetISP.exe")
-        print("Installer: use installer/setup.iss with Inno Setup 6+")
+        print("Executable: dist/SSNetISP/SSNetISP.exe (With Icon)")
+        print("\nTO CREATE INSTALLER (.exe):")
+        print("1. Install Inno Setup (https://jrsoftware.org/isinfo.php)")
+        print("2. Open 'installer/setup.iss' in Inno Setup Compiler")
+        print("3. Click 'Compile' (Build -> Compile)")
+        print("4. Result: dist/installer/SSNetISP_Setup_v1.0.0.exe")
     elif os_name == "Darwin":
         print("Output: dist/SS Net ISP.app")
         print("Install: drag app to Applications")
