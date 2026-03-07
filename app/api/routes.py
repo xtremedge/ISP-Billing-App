@@ -1674,15 +1674,22 @@ async def import_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
     reader  = csv.DictReader(io.StringIO(content))
     added = updated = skipped = 0
     errors = []
-    # Track max existing sr_no for auto-generation
-    existing_max_sr = db.query(Customer).count()
-    auto_sr_counter = existing_max_sr
+    
+    # 1. Reliable max serial number detection
+    try:
+        max_sr_res = db.execute(text("SELECT MAX(CAST(sr_no AS INTEGER)) FROM customers")).scalar()
+        auto_sr_counter = int(max_sr_res or 0)
+    except:
+        auto_sr_counter = db.query(Customer).count()
+
     def norm(d):
         return {k.strip().lower(): (v.strip() if v else "") for k, v in d.items() if k}
+    
     for i, raw in enumerate(reader, start=2):
         row = norm(raw)
         username = row.get("username", "").strip()
         if not username: skipped += 1; continue
+        
         full_name    = (row.get("full name") or row.get("fullname") or
                         row.get("full_name") or row.get("name") or username)
         mobile       = (row.get("mobile") or row.get("phone") or
@@ -1699,37 +1706,53 @@ async def import_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
         svc2         = row.get("service 2") or row.get("service2") or ""
         svc3         = row.get("service 3") or row.get("service3") or ""
         svc4         = row.get("service 4") or row.get("service4") or ""
+        
         exp_date = None
         for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y",
                     "%Y/%m/%d", "%d.%m.%Y", "%Y.%m.%d"):
             try: exp_date = datetime.strptime(expiring_str, fmt).date(); break
             except: pass
+            
         area_obj = None
         if area_name:
             area_obj = db.query(Area).filter(Area.name == area_name.strip()).first()
             if not area_obj:
                 area_obj = Area(name=area_name.strip()); db.add(area_obj); db.flush()
+        
         pkg_obj = None
         if pkg_name:
             pkg_obj = db.query(Package).filter(Package.name == pkg_name.strip()).first()
             if not pkg_obj:
                 pkg_obj = Package(name=pkg_name.strip(), speed=pkg_name.strip()); db.add(pkg_obj); db.flush()
+        
         try:
             existing = db.query(Customer).filter(Customer.username == username).first()
-            # Auto-generate sr_no if not provided
-            if not sr_no:
-                auto_sr_counter += 1
-                sr_no = str(auto_sr_counter)
+            
+            # Decide on sr_no: if missing in CSV, use existing or auto-generate
+            effective_sr_no = sr_no
+            if not effective_sr_no:
+                if existing and existing.sr_no:
+                    effective_sr_no = existing.sr_no
+                else:
+                    auto_sr_counter += 1
+                    effective_sr_no = str(auto_sr_counter)
+            
             if existing:
-                if sr_no: existing.sr_no = sr_no
-                existing.full_name=full_name; existing.mobile=mobile
-                existing.expiring=exp_date; existing.package_id=pkg_obj.id if pkg_obj else None
-                existing.package_name_raw=pkg_name; existing.area_id=area_obj.id if area_obj else None
-                existing.area_name_raw=area_name; existing.service2=svc2
-                existing.service3=svc3; existing.service4=svc4; existing.imported_at=datetime.utcnow()
+                existing.sr_no = effective_sr_no
+                existing.full_name = full_name
+                existing.mobile = mobile
+                existing.expiring = exp_date
+                existing.package_id = pkg_obj.id if pkg_obj else None
+                existing.package_name_raw = pkg_name
+                existing.area_id = area_obj.id if area_obj else None
+                existing.area_name_raw = area_name
+                existing.service2 = svc2
+                existing.service3 = svc3
+                existing.service4 = svc4
+                existing.imported_at = datetime.utcnow()
                 updated += 1
             else:
-                c = Customer(sr_no=sr_no, username=username, full_name=full_name, mobile=mobile,
+                c = Customer(sr_no=effective_sr_no, username=username, full_name=full_name, mobile=mobile,
                              expiring=exp_date, package_id=pkg_obj.id if pkg_obj else None,
                              package_name_raw=pkg_name, area_id=area_obj.id if area_obj else None,
                              area_name_raw=area_name, service2=svc2, service3=svc3, service4=svc4,
@@ -1737,6 +1760,7 @@ async def import_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
                 db.add(c); added += 1
         except Exception as e:
             errors.append(f"Row {i}: {e}")
+            
     db.commit()
     log_activity(db, f"CSV import: {added} added, {updated} updated", "import")
     return {"added": added, "updated": updated, "skipped": skipped, "errors": errors[:20]}

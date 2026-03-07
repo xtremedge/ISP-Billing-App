@@ -1995,6 +1995,8 @@
             <table>
               <thead>
                 <tr>
+                  <th class="cb-th"><input type="checkbox" id="cbUnpaidAll"
+                      onchange="toggleSelectAll('unpaid',this.checked)"></th>
                   <th>Customer</th>
                   <th>Mobile</th>
                   <th>Area</th>
@@ -3097,6 +3099,7 @@
       document.getElementById('billTb').innerHTML = items.map(b => {
         const ex = (b.charges || []).reduce((s, c) => s + c.amount, 0);
         return `<tr style="${b.status !== 'paid' ? 'background:rgba(255,68,68,.02)' : ''}">
+      <td class="cb-td"><input type="checkbox" data-id="${b.id}" onchange="toggleRowSel('bill','${b.id}',this.checked)"></td>
       <td><strong>${b.customer_name}</strong><br><span style="font-size:10.5px;color:var(--text2);font-family:'DM Mono',monospace">${b.customer_username}</span></td>
       <td style="font-family:'DM Mono',monospace;font-size:11.5px">${fmtM(b.month)}</td>
       <td class="amt">${fmtPKR(b.package_fee)}</td>
@@ -3127,6 +3130,7 @@
       document.getElementById('unpaidCnt').textContent = `${items.length} unpaid`;
       if (!items.length) { document.getElementById('unpaidTb').innerHTML = empty_('✅ All clear! No unpaid bills.'); return; }
       document.getElementById('unpaidTb').innerHTML = items.map(b => `<tr style="${b.is_overdue ? 'background:rgba(255,68,68,.035)' : 'background:rgba(255,204,0,.018)'}">
+    <td class="cb-td"><input type="checkbox" data-id="${b.id}" onchange="toggleRowSel('unpaid','${b.id}',this.checked)"></td>
     <td><strong>${b.customer_name}</strong><br><span style="font-size:10.5px;color:var(--text2)">${b.customer_username}</span></td>
     <td style="font-family:'DM Mono',monospace;font-size:11.5px">${b.customer_mobile || '—'}</td>
     <td><span class="ab">${b.customer_area || '—'}</span></td>
@@ -3161,6 +3165,7 @@
       populateMonths(months);
       if (!items.length) { document.getElementById('paidTb').innerHTML = empty_('No paid records'); return; }
       document.getElementById('paidTb').innerHTML = items.map(b => `<tr>
+    <td class="cb-td"><input type="checkbox" data-id="${b.id}" onchange="toggleRowSel('paid','${b.id}',this.checked)"></td>
     <td><strong>${b.customer_name}</strong><br><span style="font-size:10.5px;color:var(--text2)">${b.customer_username}</span></td>
     <td style="font-family:'DM Mono',monospace;font-size:11.5px">${b.customer_mobile || '—'}</td>
     <td><span class="ab">${b.customer_area || '—'}</span></td>
@@ -3169,7 +3174,7 @@
     <td class="amt paid" style="font-weight:700">${fmtPKR(b.total_amount)}</td>
     <td style="font-size:11.5px;color:var(--green)">${b.paid_date || '—'}</td>
     <td style="font-size:11.5px;color:var(--text2)">${b.paid_method || '—'}</td>
-    <td>
+    <td class="td-actions">
       <button type="button" class="btn btn-w btn-xs" onclick="openEditBill('${b.id}')">✏️</button>
       <button type="button" class="btn btn-d btn-xs" onclick="deleteBill('${b.id}')">🗑️</button>
       <button type="button" class="btn btn-o btn-xs" onclick="printPDF('${b.id}')">🖨️ PDF</button>
@@ -3192,6 +3197,7 @@
       populateMonths(months);
       if (!items.length) { document.getElementById('histTb').innerHTML = empty_(); return; }
       document.getElementById('histTb').innerHTML = items.map(b => `<tr>
+    <td class="cb-td"><input type="checkbox" data-id="${b.id}" onchange="toggleRowSel('hist','${b.id}',this.checked)"></td>
     <td><strong>${b.customer_name}</strong><br><span style="font-size:10.5px;color:var(--text2)">${b.customer_username}</span></td>
     <td><span class="ab">${b.customer_area || '—'}</span></td>
     <td style="font-size:11.5px">${fmtM(b.month)}</td>
@@ -3201,7 +3207,7 @@
     <td>${stag(b.status)}</td>
     <td style="font-size:11.5px;color:var(--text2)">${b.paid_date || '—'}</td>
     <td style="font-size:11.5px;color:var(--text2)">${b.paid_method || '—'}</td>
-    <td><button type="button" class="btn btn-o btn-xs" onclick="printPDF('${b.id}')">🖨️</button></td>
+    <td class="td-actions"><button type="button" class="btn btn-o btn-xs" onclick="printPDF('${b.id}')">🖨️</button></td>
   </tr>`).join('');
     }
 
