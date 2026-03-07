@@ -3,7 +3,12 @@ SS Net ISP Billing — Desktop Application Entry Point
 PyQt6 window embedding a WebEngine that loads the FastAPI + HTML UI.
 """
 import os
-os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu"
+os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+    "--disable-features=Translate,OptimizationHints "
+    "--disable-extensions "
+    "--disable-background-networking "
+    "--no-first-run"
+)
 
 import sys
 import time
@@ -189,7 +194,7 @@ def main():
     splash.set_progress(100, "Ready!")
     time.sleep(0.4)
     splash.finish(window)
-    window.show()
+    window.showMaximized()
 
     sys.exit(app.exec())
 

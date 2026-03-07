@@ -5,10 +5,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SS Net ISP Billing</title>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap"
-    rel="stylesheet">
   <style>
+    @import url('data:text/css,');
+    /* Fonts: system stack for instant load (no network) */
+
     :root {
       --bg: #0a0e1a;
       --surface: #111827;
@@ -24,14 +24,16 @@
       --card: #141c2e
     }
 
-    * {
+    *,
+    *::before,
+    *::after {
       margin: 0;
       padding: 0;
       box-sizing: border-box
     }
 
     body {
-      font-family: 'DM Sans', sans-serif;
+      font-family: 'DM Sans', 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
       background: var(--bg);
       color: var(--text);
       height: 100vh;
@@ -382,8 +384,7 @@
     }
 
     .sv {
-      
-      font-family: "roboto", sans-serif;
+      font-family: 'Roboto', 'Arial', sans-serif;
       font-size: 24px;
       font-weight: 800
     }
@@ -444,13 +445,25 @@
       border-radius: 7px;
       border: none;
       cursor: pointer;
-      font-family: 'DM Sans', sans-serif;
+      font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
       font-size: 12.5px;
       font-weight: 600;
-      transition: .15s;
+      /* transition removed for instant feel */
       display: inline-flex;
       align-items: center;
-      gap: 6px
+      gap: 6px;
+      user-select: none;
+      -webkit-user-select: none
+    }
+
+    .btn:active {
+      transform: scale(.97)
+    }
+
+    .btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+      pointer-events: none
     }
 
     .btn-p {
@@ -952,7 +965,7 @@
       z-index: 999;
       align-items: center;
       justify-content: center;
-      backdrop-filter: blur(4px)
+      /* backdrop-filter removed for perf */
     }
 
     .mb.open {
@@ -966,7 +979,7 @@
       width: min(580px, 94vw);
       max-height: 88vh;
       overflow-y: auto;
-      animation: su .2s ease
+      /* animation removed for perf */
     }
 
     @keyframes su {
@@ -1189,6 +1202,53 @@
       background: var(--border);
       border-radius: 3px
     }
+
+    /* CHECKBOX TABLE SELECTION */
+    .cb-th {
+      width: 32px;
+      padding: 8px 6px !important;
+      text-align: center
+    }
+
+    .cb-td {
+      width: 32px;
+      padding: 6px 6px !important;
+      text-align: center
+    }
+
+    input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      cursor: pointer;
+      accent-color: var(--accent)
+    }
+
+    /* SELECTION ACTION BAR */
+    .sel-bar {
+      display: none;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(0, 212, 255, .12);
+      border: 1px solid rgba(0, 212, 255, .3);
+      border-radius: 9px;
+      padding: 8px 16px;
+      margin-bottom: 10px;
+      align-items: center;
+      gap: 10px;
+      /* backdrop-filter removed */
+    }
+
+    .sel-bar.show {
+      display: flex
+    }
+
+    .sel-bar-txt {
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 12.5px;
+      flex: 1
+    }
   </style>
 </head>
 
@@ -1199,8 +1259,10 @@
       <div class="auth-sub" id="authSub">Login to continue</div>
       <div class="auth-tabs" id="authTabs">
         <button type="button" class="btn btn-p btn-sm" id="authTabLogin" onclick="showAuthPanel('login')">Login</button>
-        <button type="button" class="btn btn-o btn-sm" id="authTabForgot" onclick="showAuthPanel('forgot')">Forgot</button>
-        <button type="button" class="btn btn-o btn-sm" id="authTabSignup" onclick="showAuthPanel('signup')">Sign Up</button>
+        <button type="button" class="btn btn-o btn-sm" id="authTabForgot"
+          onclick="showAuthPanel('forgot')">Forgot</button>
+        <button type="button" class="btn btn-o btn-sm" id="authTabSignup" onclick="showAuthPanel('signup')">Sign
+          Up</button>
       </div>
 
       <div id="authPanelSignup" style="display:none">
@@ -1209,24 +1271,29 @@
             placeholder="Min 8 chars with upper/lower/number"></div>
         <div class="fg"><label>Recovery Key</label><input type="text" id="auRecovery"
             placeholder="Save this safely for forgot password"></div>
-        <button type="button" class="btn btn-p" style="width:100%;margin-top:8px" onclick="signupAdmin()">Create Admin Account</button>
+        <button type="button" class="btn btn-p" style="width:100%;margin-top:8px" onclick="signupAdmin()">Create Admin
+          Account</button>
       </div>
 
       <div id="authPanelLogin" style="display:none">
-        <div class="fg"><label>Username</label><input type="text" id="alUser"></div>
-        <div class="fg"><label>Password</label><input type="password" id="alPass"></div>
+        <div class="fg"><label>Username</label><input type="text" id="alUser"
+            onkeypress="if(event.key==='Enter') loginAdmin()"></div>
+        <div class="fg"><label>Password</label><input type="password" id="alPass"
+            onkeypress="if(event.key==='Enter') loginAdmin()"></div>
         <button type="button" class="btn btn-p" style="width:100%;margin-top:8px" onclick="loginAdmin()">Login</button>
       </div>
 
       <div id="authPanelForgot" style="display:none">
         <div class="fg"><label>Recovery Key</label><input type="text" id="afRecovery"
             placeholder="Enter saved recovery key"></div>
-        <button type="button" class="btn btn-o btn-sm" style="width:100%;margin-top:6px" onclick="recoverAdminUsername()">Recover
+        <button type="button" class="btn btn-o btn-sm" style="width:100%;margin-top:6px"
+          onclick="recoverAdminUsername()">Recover
           Username</button>
         <div class="fg" style="margin-top:10px"><label>Username</label><input type="text" id="afUser"></div>
         <div class="fg"><label>New Password</label><input type="password" id="afNewPass"
             placeholder="Min 8 chars with upper/lower/number"></div>
-        <button type="button" class="btn btn-w btn-sm" style="width:100%;margin-top:6px" onclick="resetAdminPassword()">Reset
+        <button type="button" class="btn btn-w btn-sm" style="width:100%;margin-top:6px"
+          onclick="resetAdminPassword()">Reset
           Password</button>
       </div>
 
@@ -1238,7 +1305,8 @@
   <!-- Edit Bill Modal -->
   <div class="mb" id="mEditBill">
     <div class="modal">
-      <div class="mh"><span class="mt">✏️ Edit Bill</span><button type="button" class="mx" onclick="closeM('mEditBill')">✕</button></div>
+      <div class="mh"><span class="mt">✏️ Edit Bill</span><button type="button" class="mx"
+          onclick="closeM('mEditBill')">✕</button></div>
       <div class="mbody">
         <input type="hidden" id="ebId">
         <div class="fgrid">
@@ -1248,7 +1316,8 @@
           <div class="fg"><label>Notes</label><input type="text" id="ebNotes" placeholder="Notes"></div>
         </div>
       </div>
-      <div class="mfoot"><button type="button" class="btn btn-o" onclick="closeM('mEditBill')">Cancel</button><button type="button" class="btn btn-p" onclick="saveEditBill()">💾 Save</button></div>
+      <div class="mfoot"><button type="button" class="btn btn-o" onclick="closeM('mEditBill')">Cancel</button><button
+          type="button" class="btn btn-p" onclick="saveEditBill()">💾 Save</button></div>
     </div>
   </div>
 
@@ -1258,7 +1327,8 @@
   <!-- First-Run Walkthrough -->
   <div class="mb" id="mWalkthrough">
     <div class="modal" style="width:min(700px,95vw)">
-      <div class="mh"><span class="mt">Quick Walkthrough</span><button type="button" class="mx" onclick="finishWalkthrough()">✕</button>
+      <div class="mh"><span class="mt">Quick Walkthrough</span><button type="button" class="mx"
+          onclick="finishWalkthrough()">✕</button>
       </div>
       <div class="mbody">
         <div id="walkStepTitle" style="font-weight:800;font-size:16px;margin-bottom:6px"></div>
@@ -1277,7 +1347,8 @@
   <!-- Add/Edit Customer Modal -->
   <div class="mb" id="mCustForm">
     <div class="modal">
-      <div class="mh"><span class="mt" id="mCustFormTitle">👤 New Customer</span><button type="button" class="mx" onclick="closeM('mCustForm')">✕</button></div>
+      <div class="mh"><span class="mt" id="mCustFormTitle">👤 New Customer</span><button type="button" class="mx"
+          onclick="closeM('mCustForm')">✕</button></div>
       <div class="mbody">
         <input type="hidden" id="cfId">
         <div class="fgrid">
@@ -1288,11 +1359,16 @@
           <div class="fg"><label>Area</label><select id="cfArea"></select></div>
           <div class="fg"><label>Package</label><select id="cfPackage"></select></div>
           <div class="fg"><label>Expiring</label><input type="date" id="cfExpiring"></div>
-          <div class="fg"><label>Status</label><select id="cfStatus"><option value="active">Active</option><option value="suspended">Suspended</option><option value="disconnected">Disconnected</option></select></div>
+          <div class="fg"><label>Status</label><select id="cfStatus">
+              <option value="active">Active</option>
+              <option value="suspended">Suspended</option>
+              <option value="disconnected">Disconnected</option>
+            </select></div>
           <div class="fg"><label>Notes</label><input type="text" id="cfNotes" placeholder="Notes"></div>
         </div>
       </div>
-      <div class="mfoot"><button type="button" class="btn btn-o" onclick="closeM('mCustForm')">Cancel</button><button type="button" class="btn btn-p" onclick="saveCust()">💾 Save</button></div>
+      <div class="mfoot"><button type="button" class="btn btn-o" onclick="closeM('mCustForm')">Cancel</button><button
+          type="button" class="btn btn-p" onclick="saveCust()">💾 Save</button></div>
     </div>
   </div>
 
@@ -1437,15 +1513,16 @@
           style="padding:11px 13px;background:rgba(0,212,255,.05);border-radius:7px;font-size:12.5px;color:var(--text2)">
           Creates one bill per active customer. Already-existing bills are skipped.</div>
       </div>
-      <div class="mfoot"><button type="button" class="btn btn-o" onclick="closeM('mGenBills')">Cancel</button><button type="button"
-          class="btn btn-p" onclick="generateBills()">⚡ Generate</button></div>
+      <div class="mfoot"><button type="button" class="btn btn-o" onclick="closeM('mGenBills')">Cancel</button><button
+          type="button" class="btn btn-p" onclick="generateBills()">⚡ Generate</button></div>
     </div>
   </div>
 
   <!-- ISP Settings -->
   <div class="mb" id="mSettings">
     <div class="modal">
-      <div class="mh"><span class="mt">⚙️ ISP Settings</span><button type="button" class="mx" onclick="closeM('mSettings')">✕</button>
+      <div class="mh"><span class="mt">⚙️ ISP Settings</span><button type="button" class="mx"
+          onclick="closeM('mSettings')">✕</button>
       </div>
       <div class="mbody">
         <div class="fg"><label>ISP Name</label><input type="text" id="stName"></div>
@@ -1479,7 +1556,8 @@
           <div class="fg">
             <label>Logo</label>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <button type="button" class="btn btn-o btn-sm" onclick="document.getElementById('stLogoFile').click()">Choose
+              <button type="button" class="btn btn-o btn-sm"
+                onclick="document.getElementById('stLogoFile').click()">Choose
                 Logo</button>
               <button type="button" class="btn btn-p btn-sm" onclick="uploadBrandLogo()">Upload Logo</button>
               <input type="file" id="stLogoFile" accept=".png,.jpg,.jpeg" style="display:none">
@@ -1498,8 +1576,8 @@
           </div>
         </div>
       </div>
-      <div class="mfoot"><button type="button" class="btn btn-o" onclick="closeM('mSettings')">Cancel</button><button type="button"
-          class="btn btn-p" onclick="saveSettings()">💾 Save</button></div>
+      <div class="mfoot"><button type="button" class="btn btn-o" onclick="closeM('mSettings')">Cancel</button><button
+          type="button" class="btn btn-p" onclick="saveSettings()">💾 Save</button></div>
     </div>
   </div>
 
@@ -1517,12 +1595,32 @@
           <div class="fg"><label>Description</label><input type="text" id="pkgDesc"></div>
         </div>
       </div>
-      <div class="mfoot"><button type="button" class="btn btn-o" onclick="closeM('mPackage')">Cancel</button><button type="button" class="btn btn-p"
-          onclick="savePackage()">💾 Save</button></div>
+      <div class="mfoot"><button type="button" class="btn btn-o" onclick="closeM('mPackage')">Cancel</button><button
+          type="button" class="btn btn-p" onclick="savePackage()">💾 Save</button></div>
     </div>
   </div>
 
-  <!-- ── SIDEBAR ──────────────────────────────────────────────────────────────── -->
+  <!-- ── EXPORT MODAL (shared) ──────────────────────────────────────── -->
+  <div class="mb" id="mExport">
+    <div class="modal" style="width:min(500px,94vw)">
+      <div class="mh"><span class="mt" id="mExportTitle">📤 Export Data</span><button type="button" class="mx"
+          onclick="closeM('mExport')">✕</button></div>
+      <div class="mbody">
+        <div id="mExportFilters"></div>
+        <div
+          style="padding:10px 13px;background:rgba(0,212,255,.05);border-radius:7px;font-size:12px;color:var(--text2);margin-top:8px">
+          ℹ️ Export will use the current table filters. PDF opens in-app; Excel downloads as a file.
+        </div>
+      </div>
+      <div class="mfoot">
+        <button type="button" class="btn btn-o" onclick="closeM('mExport')">Cancel</button>
+        <button type="button" class="btn btn-o btn-sm" id="btnExportExcel" onclick="doExport('excel')">📊 Excel</button>
+        <button type="button" class="btn btn-p btn-sm" id="btnExportPDF" onclick="doExport('pdf')">📄 PDF</button>
+      </div>
+    </div>
+  </div>
+
+
   <div class="sidebar">
     <div class="logo" id="brandBox">
       <div class="logo-icon">📡</div>
@@ -1551,7 +1649,7 @@
       <div style="font-size:11.5px;color:var(--text2)"><span class="sdot"></span>System Active</div>
       <div style="display:flex;gap:7px;margin-top:9px">
         <button type="button" class="btn btn-w btn-xs" onclick="openWalkthrough(true)">Guide</button>
-        <button type="button"  class="btn btn-o btn-xs" onclick="openSettings()">⚙️ Settings</button>
+        <button type="button" class="btn btn-o btn-xs" onclick="openSettings()">⚙️ Settings</button>
         <button type="button" class="btn btn-d btn-xs" onclick="logoutAdmin()">Logout</button>
       </div>
     </div>
@@ -1730,9 +1828,12 @@
       <div class="page" id="page-customers">
         <div class="fbar">
           <div class="sb"><input type="text" id="custQ" placeholder="Search name, username, mobile..."
-              oninput="loadCustomers()"></div>
+              oninput="debounce(loadCustomers,250)()"></div>
           <select id="custArea" onchange="loadCustomers()">
             <option value="">All Areas</option>
+          </select>
+          <select id="custPackage" onchange="loadCustomers()">
+            <option value="">All Packages</option>
           </select>
           <select id="custStatus" onchange="loadCustomers()">
             <option value="">All Status</option>
@@ -1740,12 +1841,26 @@
             <option value="suspended">Suspended</option>
             <option value="disconnected">Disconnected</option>
           </select>
-          <select id="custDues" onchange="loadCustomers()">
-            <option value="">Any</option>
-            <option value="1">Has Dues</option>
+          <select id="custBillStatus" onchange="loadCustomers()">
+            <option value="">Bill: Any</option>
+            <option value="paid">Bill: Paid</option>
+            <option value="unpaid">Bill: Unpaid</option>
+            <option value="partial">Bill: Partial</option>
+            <option value="overdue">Bill: Overdue</option>
+            <option value="no_bill">No Bill</option>
           </select>
         </div>
-        <button type="button" class="btn btn-p btn-sm" onclick="openNewCust()" style="margin-bottom:12px">+ Add Customer</button>
+        <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+          <button type="button" class="btn btn-p btn-sm" onclick="openNewCust()">+ Add Customer</button>
+          <button type="button" class="btn btn-o btn-sm" onclick="openExport('customers')">📤 Export</button>
+        </div>
+        <!-- Selection bar -->
+        <div class="sel-bar" id="selBarCust">
+          <span class="sel-bar-txt" id="selBarCustTxt">0 selected</span>
+          <button type="button" class="btn btn-d btn-xs" onclick="bulkDeleteSelected('cust')">🗑️ Delete
+            Selected</button>
+          <button type="button" class="btn btn-o btn-xs" onclick="clearSelection('cust')">✕ Clear</button>
+        </div>
         <div class="card">
           <div class="card-hdr"><span class="card-title">All Customers</span><span id="custCnt"
               style="font-size:11.5px;color:var(--text2)"></span></div>
@@ -1753,6 +1868,8 @@
             <table>
               <thead>
                 <tr>
+                  <th class="cb-th"><input type="checkbox" id="cbCustAll"
+                      onchange="toggleSelectAll('cust',this.checked)"></th>
                   <th>Sr</th>
                   <th>Username</th>
                   <th>Full Name</th>
@@ -1773,7 +1890,8 @@
       <!-- BILLING -->
       <div class="page" id="page-billing">
         <div class="fbar">
-          <div class="sb"><input type="text" id="billQ" placeholder="Search customer..." oninput="loadBills()"></div>
+          <div class="sb"><input type="text" id="billQ" placeholder="Search customer..."
+              oninput="debounce(loadBills,250)()"></div>
           <select id="billMonth" onchange="loadBills()">
             <option value="">All Months</option>
           </select>
@@ -1786,6 +1904,14 @@
           <select id="billArea" onchange="loadBills()">
             <option value="">All Areas</option>
           </select>
+          <button type="button" class="btn btn-o btn-sm" onclick="openExport('bills')">📤 Export</button>
+        </div>
+        <!-- Selection bar -->
+        <div class="sel-bar" id="selBarBill">
+          <span class="sel-bar-txt" id="selBarBillTxt">0 selected</span>
+          <button type="button" class="btn btn-d btn-xs" onclick="bulkDeleteSelected('bill')">🗑️ Delete
+            Selected</button>
+          <button type="button" class="btn btn-o btn-xs" onclick="clearSelection('bill')">✕ Clear</button>
         </div>
         <div class="card">
           <div class="card-hdr"><span class="card-title">💰 All Bills</span><span id="billCnt"
@@ -1794,6 +1920,8 @@
             <table>
               <thead>
                 <tr>
+                  <th class="cb-th"><input type="checkbox" id="cbBillAll"
+                      onchange="toggleSelectAll('bill',this.checked)"></th>
                   <th>Customer</th>
                   <th>Month</th>
                   <th>Pkg Fee</th>
@@ -1814,11 +1942,21 @@
       <!-- UNPAID -->
       <div class="page" id="page-unpaid">
         <div class="fbar">
-          <div class="sb"><input type="text" id="unpaidQ" placeholder="Search..." oninput="loadUnpaid()"></div>
+          <div class="sb"><input type="text" id="unpaidQ" placeholder="Search..." oninput="debounce(loadUnpaid,250)()">
+          </div>
           <select id="unpaidArea" onchange="loadUnpaid()">
             <option value="">All Areas</option>
           </select>
-          <button type="button" class="btn btn-d btn-sm" onclick="sendAllOverdueReminders()">📱 Remind All Overdue</button>
+          <button type="button" class="btn btn-d btn-sm" onclick="sendAllOverdueReminders()">📱 Remind All
+            Overdue</button>
+          <button type="button" class="btn btn-o btn-sm" onclick="openExport('unpaid')">📤 Export</button>
+        </div>
+        <!-- Selection bar -->
+        <div class="sel-bar" id="selBarUnpaid">
+          <span class="sel-bar-txt" id="selBarUnpaidTxt">0 selected</span>
+          <button type="button" class="btn btn-d btn-xs" onclick="bulkDeleteSelected('unpaid')">🗑️ Delete
+            Selected</button>
+          <button type="button" class="btn btn-o btn-xs" onclick="clearSelection('unpaid')">✕ Clear</button>
         </div>
         <div class="card">
           <div class="card-hdr"><span class="card-title">⚠️ Unpaid Bills & Dues</span><span id="unpaidCnt"
@@ -1848,13 +1986,22 @@
       <!-- PAID -->
       <div class="page" id="page-paid">
         <div class="fbar">
-          <div class="sb"><input type="text" id="paidQ" placeholder="Search..." oninput="loadPaid()"></div>
+          <div class="sb"><input type="text" id="paidQ" placeholder="Search..." oninput="debounce(loadPaid,250)()">
+          </div>
           <select id="paidMonth" onchange="loadPaid()">
             <option value="">All Months</option>
           </select>
           <select id="paidArea" onchange="loadPaid()">
             <option value="">All Areas</option>
           </select>
+          <button type="button" class="btn btn-o btn-sm" onclick="openExport('paid')">📤 Export</button>
+        </div>
+        <!-- Selection bar -->
+        <div class="sel-bar" id="selBarPaid">
+          <span class="sel-bar-txt" id="selBarPaidTxt">0 selected</span>
+          <button type="button" class="btn btn-d btn-xs" onclick="bulkDeleteSelected('paid')">🗑️ Delete
+            Selected</button>
+          <button type="button" class="btn btn-o btn-xs" onclick="clearSelection('paid')">✕ Clear</button>
         </div>
         <div class="card">
           <div class="card-hdr"><span class="card-title">✅ Paid Bills</span><span id="paidCnt"
@@ -1863,6 +2010,8 @@
             <table>
               <thead>
                 <tr>
+                  <th class="cb-th"><input type="checkbox" id="cbPaidAll"
+                      onchange="toggleSelectAll('paid',this.checked)"></th>
                   <th>Customer</th>
                   <th>Mobile</th>
                   <th>Area</th>
@@ -1972,7 +2121,8 @@
       <!-- HISTORY -->
       <div class="page" id="page-history">
         <div class="fbar">
-          <div class="sb"><input type="text" id="histQ" placeholder="Search customer..." oninput="loadHistory()"></div>
+          <div class="sb"><input type="text" id="histQ" placeholder="Search customer..."
+              oninput="debounce(loadHistory,250)()"></div>
           <select id="histMonth" onchange="loadHistory()">
             <option value="">All Months</option>
           </select>
@@ -1982,6 +2132,7 @@
             <option value="unpaid">Unpaid</option>
             <option value="partial">Partial</option>
           </select>
+          <button type="button" class="btn btn-o btn-sm" onclick="openExport('history')">📤 Export</button>
         </div>
         <div class="card">
           <div class="card-hdr"><span class="card-title">📋 Full Billing History</span></div>
@@ -1989,6 +2140,8 @@
             <table>
               <thead>
                 <tr>
+                  <th class="cb-th"><input type="checkbox" id="cbHistAll"
+                      onchange="toggleSelectAll('hist',this.checked)"></th>
                   <th>Customer</th>
                   <th>Area</th>
                   <th>Month</th>
@@ -2010,8 +2163,8 @@
       <!-- PACKAGES -->
       <div class="page" id="page-packages">
         <div class="card">
-          <div class="card-hdr"><span class="card-title">📦 Internet Packages</span><button type="button" class="btn btn-p btn-sm"
-              onclick="openNewPackage()">+ New</button></div>
+          <div class="card-hdr"><span class="card-title">📦 Internet Packages</span><button type="button"
+              class="btn btn-p btn-sm" onclick="openNewPackage()">+ New</button></div>
           <div class="tw">
             <table>
               <thead>
@@ -2060,71 +2213,71 @@
   </div><!-- /main -->
 
   <script>
-                // ─── BUTTON HANDLERS ───────────────────────────────────────────────────────
-                document.getElementById('mCustRm').onclick = function() {
-                  const id = document.getElementById('ebId')?.value || document.getElementById('cfId')?.value;
-                  if (!id) { alert_('Error', 'No customer selected', 'warn'); return; }
-                  openRmFor(id);
-                };
-                document.getElementById('mCustPdf').onclick = function() {
-                  const id = document.getElementById('ebId')?.value || document.getElementById('cfId')?.value;
-                  if (!id) { alert_('Error', 'No customer selected', 'warn'); return; }
-                  printCustPDF(id);
-                };
-                document.getElementById('mCustBillPdf').onclick = function() {
-                  const id = document.getElementById('ebId')?.value || document.getElementById('cfId')?.value;
-                  if (!id) { alert_('Error', 'No customer selected', 'warn'); return; }
-                  printCustPDF(id);
-                };
-                document.getElementById('mGenBills').querySelector('.btn-p').onclick = function() {
-                  generateBills();
-                };
-            async function openEditBill(id) {
-              const b = await GET(`/bills/${id}`);
-              if (!b) { alert_('Error', 'Bill not found', 'warn'); return; }
-              document.getElementById('ebId').value = b.id;
-              document.getElementById('ebMonth').value = b.month;
-              document.getElementById('ebPkgFee').value = b.package_fee;
-              document.getElementById('ebDue').value = b.due_date ? b.due_date.split('T')[0] : '';
-              document.getElementById('ebNotes').value = b.notes || '';
-              openM('mEditBill');
-            }
-            async function saveEditBill() {
-              const id = document.getElementById('ebId').value;
-              const data = {
-                month: document.getElementById('ebMonth').value,
-                package_fee: parseFloat(document.getElementById('ebPkgFee').value) || 0,
-                due_date: document.getElementById('ebDue').value,
-                notes: document.getElementById('ebNotes').value
-              };
-              const r = await PUT(`/bills/${id}`, data);
-              if (r) { alert_('Saved', 'Bill updated', 'success'); closeM('mEditBill'); loadBills(); }
-            }
-        // ─── CRUD ACTIONS ──────────────────────────────────────────────────────────
-        async function deleteCust(id) {
-          if (!confirm('Delete this customer?')) return;
-          await DEL(`/customers/${id}`);
-          alert_('Deleted', 'Customer removed', 'warn');
-          loadCustomers();
-        }
-        async function deletePkg(id) {
-          if (!confirm('Delete this package?')) return;
-          await DEL(`/packages/${id}`);
-          alert_('Deleted', 'Package removed', 'warn');
-          loadPackages();
-        }
-        async function deleteArea(id) {
-          if (!confirm('Delete this area?')) return;
-          await DEL(`/areas/${id}`);
-          alert_('Deleted', 'Area removed', 'warn');
-          loadAreas();
-        }
-        async function deleteBill(id) {
-          if (!confirm('Delete this bill?')) return;
-          await DEL(`/bills/${id}`);
-          alert_('Deleted', 'Bill removed', 'warn');
-          loadBills();
-        }
+    // ─── BUTTON HANDLERS ───────────────────────────────────────────────────────
+    document.getElementById('mCustRm').onclick = function () {
+      const id = document.getElementById('ebId')?.value || document.getElementById('cfId')?.value;
+      if (!id) { alert_('Error', 'No customer selected', 'warn'); return; }
+      openRmFor(id);
+    };
+    document.getElementById('mCustPdf').onclick = function () {
+      const id = document.getElementById('ebId')?.value || document.getElementById('cfId')?.value;
+      if (!id) { alert_('Error', 'No customer selected', 'warn'); return; }
+      printCustPDF(id);
+    };
+    document.getElementById('mCustBillPdf').onclick = function () {
+      const id = document.getElementById('ebId')?.value || document.getElementById('cfId')?.value;
+      if (!id) { alert_('Error', 'No customer selected', 'warn'); return; }
+      printCustPDF(id);
+    };
+    document.getElementById('mGenBills').querySelector('.btn-p').onclick = function () {
+      generateBills();
+    };
+    async function openEditBill(id) {
+      const b = await GET(`/bills/${id}`);
+      if (!b) { alert_('Error', 'Bill not found', 'warn'); return; }
+      document.getElementById('ebId').value = b.id;
+      document.getElementById('ebMonth').value = b.month;
+      document.getElementById('ebPkgFee').value = b.package_fee;
+      document.getElementById('ebDue').value = b.due_date ? b.due_date.split('T')[0] : '';
+      document.getElementById('ebNotes').value = b.notes || '';
+      openM('mEditBill');
+    }
+    async function saveEditBill() {
+      const id = document.getElementById('ebId').value;
+      const data = {
+        month: document.getElementById('ebMonth').value,
+        package_fee: parseFloat(document.getElementById('ebPkgFee').value) || 0,
+        due_date: document.getElementById('ebDue').value,
+        notes: document.getElementById('ebNotes').value
+      };
+      const r = await PUT(`/bills/${id}`, data);
+      if (r) { alert_('Saved', 'Bill updated', 'success'); closeM('mEditBill'); loadBills(); }
+    }
+    // ─── CRUD ACTIONS ──────────────────────────────────────────────────────────
+    async function deleteCust(id) {
+      if (!confirm('Delete this customer?')) return;
+      await DEL(`/customers/${id}`);
+      alert_('Deleted', 'Customer removed', 'warn');
+      loadCustomers();
+    }
+    async function deletePkg(id) {
+      if (!confirm('Delete this package?')) return;
+      await DEL(`/packages/${id}`);
+      alert_('Deleted', 'Package removed', 'warn');
+      loadPackages();
+    }
+    async function deleteArea(id) {
+      if (!confirm('Delete this area?')) return;
+      await DEL(`/areas/${id}`);
+      alert_('Deleted', 'Area removed', 'warn');
+      loadAreas();
+    }
+    async function deleteBill(id) {
+      if (!confirm('Delete this bill?')) return;
+      await DEL(`/bills/${id}`);
+      alert_('Deleted', 'Bill removed', 'warn');
+      loadBills();
+    }
     const API = 'http://127.0.0.1:8765/api';
     const AUTH_TOKEN_KEY = 'ssnet_auth_token';
     let authToken = localStorage.getItem(AUTH_TOKEN_KEY) || '';
@@ -2316,6 +2469,204 @@
     const PATCH = (p, b) => http('PATCH', p, b);
     const DEL = p => http('DELETE', p);
 
+    // ── DEBOUNCE ───────────────────────────────────────────────────────────────
+    const _debTimers = {};
+    function debounce(fn, delay) {
+      return function (...args) {
+        const key = fn.name || fn.toString().slice(0, 40);
+        clearTimeout(_debTimers[key]);
+        _debTimers[key] = setTimeout(() => fn.apply(this, args), delay);
+      };
+    }
+
+    // ── ROW SELECTION STATE ────────────────────────────────────────────────────
+    const selState = { cust: new Set(), bill: new Set(), unpaid: new Set(), paid: new Set(), hist: new Set() };
+    const SEL_CFG = {
+      cust: { bar: 'selBarCust', txt: 'selBarCustTxt', allCb: 'cbCustAll' },
+      bill: { bar: 'selBarBill', txt: 'selBarBillTxt', allCb: 'cbBillAll' },
+      unpaid: { bar: 'selBarUnpaid', txt: 'selBarUnpaidTxt', allCb: 'cbUnpaidAll' },
+      paid: { bar: 'selBarPaid', txt: 'selBarPaidTxt', allCb: 'cbPaidAll' },
+      hist: { bar: 'selBarHist', txt: 'selBarHistTxt', allCb: 'cbHistAll' },
+    };
+
+    function updateSelBar(key) {
+      const cfg = SEL_CFG[key]; if (!cfg) return;
+      const n = selState[key].size;
+      const bar = document.getElementById(cfg.bar);
+      const txt = document.getElementById(cfg.txt);
+      if (bar) bar.classList.toggle('show', n > 0);
+      if (txt) txt.textContent = `${n} row${n !== 1 ? 's' : ''} selected`;
+    }
+
+    function toggleRowSel(key, id, checked) {
+      if (checked) selState[key].add(String(id));
+      else selState[key].delete(String(id));
+      updateSelBar(key);
+    }
+
+    function toggleSelectAll(key, checked) {
+      const tb = document.getElementById(
+        { cust: 'custTb', bill: 'billTb', unpaid: 'unpaidTb', paid: 'paidTb', hist: 'histTb' }[key]
+      );
+      if (!tb) return;
+      selState[key].clear();
+      tb.querySelectorAll('input[type=checkbox][data-id]').forEach(cb => {
+        cb.checked = checked;
+        if (checked) selState[key].add(cb.dataset.id);
+      });
+      updateSelBar(key);
+    }
+
+    function clearSelection(key) {
+      selState[key].clear();
+      const allCb = document.getElementById(SEL_CFG[key]?.allCb);
+      if (allCb) allCb.checked = false;
+      const tb = document.getElementById(
+        { cust: 'custTb', bill: 'billTb', unpaid: 'unpaidTb', paid: 'paidTb', hist: 'histTb' }[key]
+      );
+      if (tb) tb.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
+      updateSelBar(key);
+    }
+
+    async function bulkDeleteSelected(key) {
+      const ids = [...selState[key]];
+      if (!ids.length) return;
+      if (!confirm(`Delete ${ids.length} selected record(s)? This cannot be undone.`)) return;
+      const isCust = key === 'cust';
+      for (const id of ids) {
+        await DEL(isCust ? `/customers/${id}` : `/bills/${id}`);
+      }
+      alert_('Deleted', `${ids.length} record(s) deleted`, 'warn');
+      clearSelection(key);
+      if (isCust) loadCustomers();
+      else loadBills();
+    }
+
+    // ── EXPORT MODAL ──────────────────────────────────────────────────────────────
+    let _exportCtx = null; // 'customers' | 'bills' | 'unpaid' | 'paid' | 'history'
+
+    function openExport(ctx) {
+      _exportCtx = ctx;
+      const titles = {
+        customers: '\ud83d\udce4 Export Customers',
+        bills: '\ud83d\udce4 Export Bills',
+        unpaid: '\ud83d\udce4 Export Unpaid Bills',
+        paid: '\ud83d\udce4 Export Paid Bills',
+        history: '\ud83d\udce4 Export Billing History',
+      };
+      document.getElementById('mExportTitle').textContent = titles[ctx] || '\ud83d\udce4 Export';
+      // Build filter summary
+      const fl = document.getElementById('mExportFilters');
+      if (ctx === 'customers') {
+        const search = document.getElementById('custQ')?.value || '';
+        const area = document.getElementById('custArea')?.value || '';
+        const pkg = document.getElementById('custPackage')?.value || '';
+        const status = document.getElementById('custStatus')?.value || '';
+        const bst = document.getElementById('custBillStatus')?.value || '';
+        fl.innerHTML = `<div style="font-size:12.5px;margin-bottom:8px;color:var(--text2)">
+          <b style="color:var(--text)">Active Filters:</b><br>
+          ${search ? `Search: <b>${search}</b><br>` : ''}
+          ${area ? `Area: <b>${area}</b><br>` : ''}
+          ${pkg ? `Package: <b>${pkg}</b><br>` : ''}
+          ${status ? `Status: <b>${status}</b><br>` : ''}
+          ${bst ? `Bill Status: <b>${bst}</b><br>` : ''}
+          ${!search && !area && !pkg && !status && !bst ? '<b>All customers (no filters)</b>' : ''}
+        </div>`;
+      } else {
+        const search = document.getElementById('billQ')?.value || document.getElementById('histQ')?.value || document.getElementById('unpaidQ')?.value || document.getElementById('paidQ')?.value || '';
+        const month = document.getElementById('billMonth')?.value || document.getElementById('histMonth')?.value || document.getElementById('paidMonth')?.value || '';
+        const status = document.getElementById('billStatus')?.value || document.getElementById('histStatus')?.value || '';
+        const area = document.getElementById('billArea')?.value || document.getElementById('unpaidArea')?.value || document.getElementById('paidArea')?.value || '';
+        fl.innerHTML = `<div style="font-size:12.5px;margin-bottom:8px;color:var(--text2)">
+          <b style="color:var(--text)">Active Filters:</b><br>
+          ${search ? `Search: <b>${search}</b><br>` : ''}
+          ${month ? `Month: <b>${month}</b><br>` : ''}
+          ${status ? `Status: <b>${status}</b><br>` : ''}
+          ${area ? `Area: <b>${area}</b><br>` : ''}
+        </div>`;
+      }
+      openM('mExport');
+    }
+
+    async function doExport(fmt) {
+      const ctx = _exportCtx;
+      if (!ctx) return;
+      closeM('mExport');
+
+      if (ctx === 'customers') {
+        const body = {
+          search: document.getElementById('custQ')?.value || '',
+          area_name: document.getElementById('custArea')?.value || '',
+          package_name: document.getElementById('custPackage')?.value || '',
+          status: document.getElementById('custStatus')?.value || '',
+          bill_status: document.getElementById('custBillStatus')?.value || '',
+          title: 'Customer Report',
+        };
+        if (fmt === 'pdf') {
+          const url = withAuthQuery(`${API}/customers/export-pdf`);
+          _postAndOpen(url, body);
+        } else {
+          await _downloadPost(`${API}/customers/export-excel`, body, 'Customers.xlsx');
+        }
+      } else {
+        // bills / unpaid / paid / history
+        const searchId = { bills: 'billQ', unpaid: 'unpaidQ', paid: 'paidQ', history: 'histQ' }[ctx] || 'billQ';
+        const monthId = { bills: 'billMonth', paid: 'paidMonth', history: 'histMonth' }[ctx] || 'billMonth';
+        const statusId = { bills: 'billStatus', history: 'histStatus' }[ctx] || 'billStatus';
+        const areaId = { bills: 'billArea', unpaid: 'unpaidArea', paid: 'paidArea' }[ctx] || 'billArea';
+        const body = {
+          search: document.getElementById(searchId)?.value || '',
+          month: document.getElementById(monthId)?.value || '',
+          status: ctx === 'unpaid' ? 'unpaid' : ctx === 'paid' ? 'paid' : document.getElementById(statusId)?.value || '',
+          area: document.getElementById(areaId)?.value || '',
+          title: ctx === 'unpaid' ? 'Unpaid Bills' : ctx === 'paid' ? 'Paid Bills' : ctx === 'history' ? 'Billing History' : 'Bills Report',
+        };
+        if (fmt === 'pdf') {
+          _postAndOpen(`${API}/bills/export-pdf`, body);
+        } else {
+          await _downloadPost(`${API}/bills/export-excel`, body, 'Bills.xlsx');
+        }
+      }
+    }
+
+    function _postAndOpen(url, body) {
+      // Create a temporary form and submit it so PDF opens as inline stream
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = withAuthQuery(url);
+      form.target = '_blank';
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = '_json'; inp.value = JSON.stringify(body);
+      // Since the server expects JSON body, we use fetch + blob approach
+      form.remove();
+      // Use fetch with blob
+      (async () => {
+        alert_('Exporting', 'Generating PDF, please wait...', 'success');
+        const headers = { 'Content-Type': 'application/json' };
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+        const r = await fetch(withAuthQuery(url.replace(API, API)), { method: 'POST', headers, body: JSON.stringify(body) });
+        if (!r.ok) { alert_('Export Failed', 'Could not generate PDF', 'danger'); return; }
+        const blob = await r.blob();
+        const objUrl = URL.createObjectURL(blob);
+        window.open(objUrl, '_blank');
+        setTimeout(() => URL.revokeObjectURL(objUrl), 30000);
+      })();
+    }
+
+    async function _downloadPost(url, body, filename) {
+      alert_('Exporting', 'Generating Excel file...', 'success');
+      const headers = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+      const r = await fetch(withAuthQuery(url), { method: 'POST', headers, body: JSON.stringify(body) });
+      if (!r.ok) { alert_('Export Failed', 'Could not generate Excel file', 'danger'); return; }
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    }
+
     // ─── ALERT ────────────────────────────────────────────────────────────────────
     function alert_(title, msg, type = 'success') {
       const icons = { success: '✅', warn: '⚠️', danger: '🚨' };
@@ -2462,6 +2813,15 @@
         el.innerHTML = '<option value="">All Areas</option>' + areas.map(a => `<option>${a}</option>`).join('');
         el.value = v;
       });
+    }
+
+    async function populatePackageSelect() {
+      const pkgs = await GET('/packages');
+      if (!Array.isArray(pkgs)) return;
+      const el = document.getElementById('custPackage'); if (!el) return;
+      const v = el.value;
+      el.innerHTML = '<option value="">All Packages</option>' + pkgs.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+      el.value = v;
     }
 
     // ─── NAVIGATION ──────────────────────────────────────────────────────────────
@@ -2611,18 +2971,23 @@
     async function loadCustomers() {
       const q = document.getElementById('custQ').value;
       const area = document.getElementById('custArea').value;
+      const pkg = document.getElementById('custPackage')?.value || '';
       const st = document.getElementById('custStatus').value;
-      const dues = document.getElementById('custDues').value;
+      const bst = document.getElementById('custBillStatus')?.value || '';
       let url = `/customers?`;
       if (q) url += `search=${encodeURIComponent(q)}&`;
       if (area) url += `area_name=${encodeURIComponent(area)}&`;
+      if (pkg) url += `package_name=${encodeURIComponent(pkg)}&`;
       if (st) url += `status=${st}&`;
-      if (dues) url += `has_dues=${dues}`;
+      if (bst) url += `bill_status=${bst}&`;
       document.getElementById('custTb').innerHTML = spin_();
       const items = await GET(url); if (!Array.isArray(items)) return;
       document.getElementById('custCnt').textContent = `${items.length} records`;
       const areas = [...new Set(items.map(c => c.area_name).filter(Boolean))];
       populateAreaSelects(areas);
+      // Clear selection on reload
+      selState.cust.clear(); updateSelBar('cust');
+      const allCb = document.getElementById('cbCustAll'); if (allCb) allCb.checked = false;
       if (!items.length) { document.getElementById('custTb').innerHTML = empty_('No customers found'); return; }
       document.getElementById('custTb').innerHTML = items.map(c => {
         const dl = c.expiring ? daysLeft(c.expiring) : null;
@@ -2631,19 +2996,20 @@
           c.status === 'active' ? `<span class="tag tg-active">Active</span>` :
             `<span class="tag tg-unpaid">${c.status}</span>`;
         return `<tr>
-      <td style="font-family:'DM Mono',monospace;font-size:10.5px;color:var(--text2)">${c.sr_no || '—'}</td>
-      <td><span style="font-family:'DM Mono',monospace;font-size:11.5px;color:var(--accent)">${c.username}</span></td>
+      <td class="cb-td"><input type="checkbox" data-id="${c.id}" onchange="toggleRowSel('cust','${c.id}',this.checked)"></td>
+      <td style="font-family:'DM Mono','Consolas',monospace;font-size:10.5px;color:var(--text2)">${c.sr_no || '\u2014'}</td>
+      <td><span style="font-family:'DM Mono','Consolas',monospace;font-size:11.5px;color:var(--accent)">${c.username}</span></td>
       <td style="font-weight:600">${c.full_name}</td>
-      <td style="font-family:'DM Mono',monospace;font-size:11.5px">${c.mobile || '—'}</td>
-      <td><span class="ab">${c.area_name || '—'}</span></td>
-      <td style="font-size:11.5px">${c.package_name || '—'}</td>
-      <td style="font-size:11.5px;color:${ec}">${c.expiring || '—'}${dl !== null ? ` (${dl}d)` : ''}</td>
+      <td style="font-family:'DM Mono','Consolas',monospace;font-size:11.5px">${c.mobile || '\u2014'}</td>
+      <td><span class="ab">${c.area_name || '\u2014'}</span></td>
+      <td style="font-size:11.5px">${c.package_name || '\u2014'}</td>
+      <td style="font-size:11.5px;color:${ec}">${c.expiring || '\u2014'}${dl !== null ? ` (${dl}d)` : ''}</td>
       <td>${tag}</td>
       <td class="td-actions">
-        <button type="button" class="btn btn-o btn-xs" onclick="viewCust('${c.id}')">👁️</button>
-        <button type="button" class="btn btn-o btn-xs" onclick="editCust('${c.id}')">✏️</button>
+        <button type="button" class="btn btn-o btn-xs" onclick="viewCust('${c.id}')">\ud83d\udc41\ufe0f</button>
+        <button type="button" class="btn btn-o btn-xs" onclick="editCust('${c.id}')">\u270f\ufe0f</button>
         <button type="button" class="btn btn-d btn-xs" onclick="deleteCust('${c.id}')">🗑️</button>
-        <button type="button" class="btn btn-w btn-xs" onclick="openRmFor('${c.id}')">📱</button>
+        <button type="button" class="btn btn-w btn-xs" onclick="openRmFor('${c.id}')">\ud83d\udcf1</button>
         <button type="button" class="btn btn-s btn-xs" onclick="openPayForCust('${c.id}')">✅</button>
         ${c.has_dues ? `<button type="button" class="btn btn-o btn-xs" onclick="printCustPDF('${c.id}')">📄</button>` : ''}
       </td></tr>`;
@@ -3328,21 +3694,21 @@
     }
     init();
   </script>
-<script>
-document.querySelectorAll("form").forEach(function(form){
-    form.addEventListener("submit", function(e){
+  <script>
+    document.querySelectorAll("form").forEach(function (form) {
+      form.addEventListener("submit", function (e) {
         e.preventDefault();
+      });
     });
-});
-</script>
-<script>
-document.addEventListener("click", function(e){
-    const a = e.target.closest("a[href='#']");
-    if(a){
+  </script>
+  <script>
+    document.addEventListener("click", function (e) {
+      const a = e.target.closest("a[href='#']");
+      if (a) {
         e.preventDefault();
-    }
-});
-</script>
+      }
+    });
+  </script>
 </body>
 
 </html>

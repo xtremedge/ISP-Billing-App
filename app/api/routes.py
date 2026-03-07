@@ -268,10 +268,19 @@ class ResetPasswordIn(BaseModel):
 class ExportCustomersIn(BaseModel):
     search: str = ""
     area_name: str = ""
+    package_name: str = ""
     bill_status: str = ""
     month: str = ""
     status: str = ""
     title: str = "Customer Report"
+
+
+class ExportBillsIn(BaseModel):
+    search: str = ""
+    area: str = ""
+    status: str = ""
+    month: str = ""
+    title: str = "Bills Report"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1324,6 +1333,8 @@ def list_customers(
     search: str = "",
     area_name: str = "",
     area_id: str = "",
+    package_name: str = "",
+    package_id: str = "",
     status: str = "",
     has_dues: str = "",
     bill_status: str = "",
@@ -1340,6 +1351,12 @@ def list_customers(
         q = q.join(Area, Customer.area_id == Area.id).filter(Area.name == area_name)
     elif area_id:
         q = q.filter(Customer.area_id == area_id)
+    if package_name:
+        from sqlalchemy.orm import aliased
+        PkgAlias = aliased(Package)
+        q = q.join(PkgAlias, Customer.package_id == PkgAlias.id).filter(PkgAlias.name == package_name)
+    elif package_id:
+        q = q.filter(Customer.package_id == package_id)
     if status:
         q = q.filter(Customer.status == status)
     customers = q.order_by(Customer.full_name).all()
@@ -1414,12 +1431,8 @@ def delete_customer(cust_id: str, db: Session = Depends(get_db)):
 
 
 # ─── EXPORT FILTERED CUSTOMERS AS PDF ────────────────────────────────────────
-@app.post("/api/customers/export-pdf")
-def export_customers_pdf(data: ExportCustomersIn, db: Session = Depends(get_db)):
-    """Export the currently filtered customer list as a branded PDF."""
-    s = db.query(ISPSettings).get(1) or ISPSettings()
-
-    q = db.query(Customer)
+def _apply_customer_export_filters(q, data, db):
+    """Shared filter logic for customer export endpoints."""
     if data.search:
         like = f"%{data.search}%"
         q = q.filter(Customer.full_name.ilike(like) |
@@ -1427,10 +1440,13 @@ def export_customers_pdf(data: ExportCustomersIn, db: Session = Depends(get_db))
                      Customer.mobile.ilike(like))
     if data.area_name:
         q = q.join(Area, Customer.area_id == Area.id).filter(Area.name == data.area_name)
+    if hasattr(data, 'package_name') and data.package_name:
+        pkg = db.query(Package).filter(Package.name == data.package_name).first()
+        if pkg:
+            q = q.filter(Customer.package_id == pkg.id)
     if data.status:
         q = q.filter(Customer.status == data.status)
     customers = q.order_by(Customer.full_name).all()
-
     if data.bill_status:
         target_month = data.month if data.month else date.today().strftime("%Y-%m")
         if data.bill_status == "paid":
@@ -1443,20 +1459,119 @@ def export_customers_pdf(data: ExportCustomersIn, db: Session = Depends(get_db))
             customers = [c for c in customers if any(b.is_overdue() for b in c.bills)]
         elif data.bill_status == "no_bill":
             customers = [c for c in customers if not any(b.month == target_month for b in c.bills)]
+    return customers
 
-    filter_parts = []
-    if data.search:      filter_parts.append(f"Search: {data.search}")
-    if data.area_name:   filter_parts.append(f"Area: {data.area_name}")
-    if data.bill_status: filter_parts.append(f"Bill: {data.bill_status}")
-    if data.month:       filter_parts.append(f"Month: {data.month}")
-    if data.status:      filter_parts.append(f"Status: {data.status}")
-    filters_desc = "  |  ".join(filter_parts) if filter_parts else "All customers"
 
+def _customer_filter_desc(data) -> str:
+    parts = []
+    if data.search:      parts.append(f"Search: {data.search}")
+    if data.area_name:   parts.append(f"Area: {data.area_name}")
+    if hasattr(data, 'package_name') and data.package_name:
+        parts.append(f"Package: {data.package_name}")
+    if data.bill_status: parts.append(f"Bill: {data.bill_status}")
+    if data.month:       parts.append(f"Month: {data.month}")
+    if data.status:      parts.append(f"Status: {data.status}")
+    return "  |  ".join(parts) if parts else "All customers"
+
+
+@app.post("/api/customers/export-pdf")
+def export_customers_pdf(data: ExportCustomersIn, db: Session = Depends(get_db)):
+    """Export the currently filtered customer list as a branded PDF."""
+    s = db.query(ISPSettings).get(1) or ISPSettings()
+    q = db.query(Customer)
+    customers = _apply_customer_export_filters(q, data, db)
+    filters_desc = _customer_filter_desc(data)
     custs_dicts = [c.to_dict() for c in customers]
     buf = build_customers_export_pdf(custs_dicts, s, data.title or "Customer Report", filters_desc)
     fname = f"Customers_{date.today().strftime('%Y%m%d')}.pdf"
+    log_activity(db, f"Exported {len(customers)} customers as PDF", "import")
     return StreamingResponse(buf, media_type="application/pdf",
                              headers={"Content-Disposition": f'inline; filename="{fname}"'})
+
+
+@app.post("/api/customers/export-excel")
+def export_customers_excel(data: ExportCustomersIn, db: Session = Depends(get_db)):
+    """Export filtered customer list as Excel (.xlsx) with all fields + bill summary."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    q = db.query(Customer)
+    customers = _apply_customer_export_filters(q, data, db)
+    filters_desc = _customer_filter_desc(data)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Customers"
+
+    # Header style
+    hdr_fill  = PatternFill("solid", fgColor="0D1B2E")
+    hdr_font  = Font(bold=True, color="FFFFFF", size=10)
+    hdr_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin      = Side(style="thin", color="CCCCCC")
+    border    = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    headers = ["Sr No", "Username", "Full Name", "Mobile", "Area", "Package",
+               "Expiring", "Status", "Total Due (PKR)", "Father Name",
+               "Address", "CNIC", "Notes"]
+    ws.append(headers)
+    for col_idx, _ in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = hdr_fill
+        cell.font = hdr_font
+        cell.alignment = hdr_align
+        cell.border = border
+
+    # Data rows
+    alt_fill = PatternFill("solid", fgColor="F5F7FA")
+    for row_idx, c in enumerate(customers, 2):
+        d = c.to_dict()
+        row_data = [
+            d.get("sr_no", "") or "",
+            d.get("username", ""),
+            d.get("full_name", ""),
+            d.get("mobile", "") or "",
+            d.get("area_name", "") or "",
+            d.get("package_name", "") or "",
+            str(d.get("expiring", "") or ""),
+            d.get("status", ""),
+            round(float(d.get("total_due", 0) or 0), 2),
+            c.service2 or "",
+            c.service3 or "",
+            c.service4 or "",
+            d.get("notes", "") or "",
+        ]
+        ws.append(row_data)
+        fill = alt_fill if row_idx % 2 == 0 else None
+        for col_idx in range(1, len(row_data) + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.border = border
+            cell.alignment = Alignment(vertical="center")
+            if fill:
+                cell.fill = fill
+
+    # Column widths
+    col_widths = [8, 14, 20, 16, 14, 16, 14, 12, 16, 18, 20, 16, 20]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+    ws.row_dimensions[1].height = 24
+
+    # Summary row
+    ws.append([])
+    total_due = sum(float(c.to_dict().get("total_due", 0) or 0) for c in customers)
+    ws.append([f"Total Customers: {len(customers)}", "", "", "", "", "", "", "",
+               round(total_due, 2)])
+    ws.append([f"Filters: {filters_desc}"])
+    ws.append([f"Generated: {datetime.now().strftime('%d %b %Y %H:%M')}"])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"Customers_{date.today().strftime('%Y%m%d')}.xlsx"
+    log_activity(db, f"Exported {len(customers)} customers as Excel", "import")
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 # ─── UPLOAD LOGO ──────────────────────────────────────────────────────────────
@@ -1494,23 +1609,34 @@ async def import_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
     reader  = csv.DictReader(io.StringIO(content))
     added = updated = skipped = 0
     errors = []
+    # Track max existing sr_no for auto-generation
+    existing_max_sr = db.query(Customer).count()
+    auto_sr_counter = existing_max_sr
     def norm(d):
         return {k.strip().lower(): (v.strip() if v else "") for k, v in d.items() if k}
     for i, raw in enumerate(reader, start=2):
         row = norm(raw)
         username = row.get("username", "").strip()
         if not username: skipped += 1; continue
-        full_name    = row.get("full name") or row.get("fullname") or row.get("name") or username
-        mobile       = row.get("mobile") or row.get("phone") or ""
-        expiring_str = row.get("expiring") or row.get("expiry") or ""
-        pkg_name     = row.get("package") or ""
-        area_name    = row.get("service 1") or row.get("service1") or row.get("area") or "General"
-        sr_no        = row.get("sr.no") or row.get("sr no") or row.get("srno") or row.get("sr") or ""
+        full_name    = (row.get("full name") or row.get("fullname") or
+                        row.get("full_name") or row.get("name") or username)
+        mobile       = (row.get("mobile") or row.get("phone") or
+                        row.get("contact") or row.get("cell") or "")
+        expiring_str = (row.get("expiring") or row.get("expiry") or
+                        row.get("expire") or row.get("exp date") or
+                        row.get("expiry date") or row.get("exp") or "")
+        pkg_name     = row.get("package") or row.get("package name") or row.get("plan") or ""
+        area_name    = (row.get("service 1") or row.get("service1") or
+                        row.get("area") or row.get("location") or "General")
+        sr_no        = (row.get("sr.no") or row.get("sr no") or row.get("srno") or
+                        row.get("sr") or row.get("no.") or row.get("no") or
+                        row.get("#") or row.get("s.no") or row.get("s no") or "")
         svc2         = row.get("service 2") or row.get("service2") or ""
         svc3         = row.get("service 3") or row.get("service3") or ""
         svc4         = row.get("service 4") or row.get("service4") or ""
         exp_date = None
-        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y"):
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y",
+                    "%Y/%m/%d", "%d.%m.%Y", "%Y.%m.%d"):
             try: exp_date = datetime.strptime(expiring_str, fmt).date(); break
             except: pass
         area_obj = None
@@ -1525,8 +1651,13 @@ async def import_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
                 pkg_obj = Package(name=pkg_name.strip(), speed=pkg_name.strip()); db.add(pkg_obj); db.flush()
         try:
             existing = db.query(Customer).filter(Customer.username == username).first()
+            # Auto-generate sr_no if not provided
+            if not sr_no:
+                auto_sr_counter += 1
+                sr_no = str(auto_sr_counter)
             if existing:
-                existing.sr_no=sr_no; existing.full_name=full_name; existing.mobile=mobile
+                if sr_no: existing.sr_no = sr_no
+                existing.full_name=full_name; existing.mobile=mobile
                 existing.expiring=exp_date; existing.package_id=pkg_obj.id if pkg_obj else None
                 existing.package_name_raw=pkg_name; existing.area_id=area_obj.id if area_obj else None
                 existing.area_name_raw=area_name; existing.service2=svc2
@@ -1660,7 +1791,203 @@ def add_payment(data: PaymentIn, db: Session = Depends(get_db)):
     return p.to_dict()
 
 
-# ─── EXTRA CHARGES ────────────────────────────────────────────────────────────
+# ─── BILLS EXPORT ─────────────────────────────────────────────────────────────
+@app.post("/api/bills/export-pdf")
+def export_bills_pdf(data: ExportBillsIn, db: Session = Depends(get_db)):
+    """Export filtered bills list as branded PDF."""
+    s = db.query(ISPSettings).get(1) or ISPSettings()
+    q = db.query(Bill)
+    if data.search:
+        q = q.join(Customer).filter(Customer.full_name.ilike(f"%{data.search}%") |
+                                     Customer.username.ilike(f"%{data.search}%"))
+    if data.month:
+        q = q.filter(Bill.month == data.month)
+    if data.status:
+        q = q.filter(Bill.status == data.status)
+    if data.area:
+        q = q.join(Customer, Bill.customer_id == Customer.id).join(Area, Customer.area_id == Area.id)\
+             .filter(Area.name == data.area)
+    bills = q.order_by(Bill.month.desc()).all()
+
+    DARK  = colors.HexColor(s.theme_surface or "#0d1b2e")
+    CYAN  = colors.HexColor(s.theme_accent or "#00a8cc")
+    LGRAY = colors.HexColor("#f5f7fa")
+    MGRAY = colors.HexColor("#e2e8f0")
+    GRN   = colors.HexColor("#1a9e5f")
+    RED   = colors.red
+
+    styles = getSampleStyleSheet()
+    def sty(name, **kw):
+        base = dict(fontName="Helvetica", fontSize=8, textColor=colors.HexColor("#2d3748"),
+                    leading=11, spaceBefore=0, spaceAfter=0)
+        base.update(kw)
+        return ParagraphStyle(name, **base)
+
+    S_TH = sty("th", fontName="Helvetica-Bold", textColor=colors.white)
+    S_TD = sty("td")
+    S_PAID = sty("pd", textColor=GRN, fontName="Helvetica-Bold")
+    S_UNPAD = sty("up", textColor=RED, fontName="Helvetica-Bold")
+    S_HDR = sty("h", fontSize=13, fontName="Helvetica-Bold", textColor=DARK)
+    S_FILT = sty("f", fontSize=8, textColor=colors.HexColor("#444"))
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=1.5*cm, rightMargin=1.5*cm,
+                            topMargin=1.2*cm, bottomMargin=1.2*cm)
+
+    elems = []
+    logo = _logo_img(s, width=2.0*cm)
+    hdr = Table([[logo if logo else "", Paragraph(f"<b>{data.title}</b>", S_HDR)],
+                 ["", Paragraph(f"{s.isp_name}  |  Generated: {date.today().strftime('%d %b %Y')}  |  Records: {len(bills)}", S_FILT)]],
+                colWidths=[2.5*cm, 15.3*cm])
+    hdr.setStyle(TableStyle([("VALIGN", (0,0), (-1,-1), "TOP")]))
+    elems.append(hdr)
+    elems.append(HRFlowable(width="100%", thickness=2, color=CYAN, spaceAfter=4))
+
+    hdrs = ["#", "Customer", "Month", "Pkg Fee", "Total", "Paid", "Remaining", "Status", "Due Date"]
+    th_row = [Paragraph(h, S_TH) for h in hdrs]
+    rows = [th_row]
+    for i, b in enumerate(bills, 1):
+        st = b.status
+        st_para = Paragraph(st.title(), S_PAID if st == "paid" else S_UNPAD)
+        rem_para = Paragraph(f"PKR {b.remaining_due():,.0f}" if b.remaining_due() > 0 else "—",
+                             S_UNPAD if b.remaining_due() > 0 else S_TD)
+        rows.append([
+            Paragraph(str(i), S_TD),
+            Paragraph(f"<b>{b.customer.full_name if b.customer else ''}</b>", S_TD),
+            Paragraph(b.month, S_TD),
+            Paragraph(f"{b.package_fee:,.0f}", S_TD),
+            Paragraph(f"{b.total_amount:,.0f}", S_TD),
+            Paragraph(f"{b.amount_paid:,.0f}" if b.amount_paid > 0 else "—", S_TD),
+            rem_para,
+            st_para,
+            Paragraph(str(b.due_date) if b.due_date else "—", S_TD),
+        ])
+
+    col_w = [0.7*cm, 5.0*cm, 2.0*cm, 1.9*cm, 1.9*cm, 1.9*cm, 2.1*cm, 1.7*cm, 2.0*cm]
+    tbl = Table(rows, colWidths=col_w, repeatRows=1)
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), DARK),
+        ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, LGRAY]),
+        ("FONTSIZE", (0,0), (-1,-1), 7.8),
+        ("TOPPADDING", (0,0), (-1,-1), 3),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+        ("LEFTPADDING", (0,0), (-1,-1), 4),
+        ("GRID", (0,0), (-1,-1), 0.3, MGRAY),
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+    ]))
+    elems.append(tbl)
+
+    total_rev  = sum(b.amount_paid for b in bills)
+    total_due  = sum(b.remaining_due() for b in bills)
+    elems.append(Spacer(1, 0.2*cm))
+    summ = Table([[Paragraph(f"Total Bills: <b>{len(bills)}</b>", S_FILT),
+                   Paragraph(f"Total Paid: <b>PKR {total_rev:,.0f}</b>", S_FILT),
+                   Paragraph(f"Total Due: <b>PKR {total_due:,.0f}</b>",
+                              sty("tdx", fontSize=8, textColor=RED if total_due else GRN))]],
+                 colWidths=[6*cm, 5.5*cm, 6.3*cm])
+    elems.append(summ)
+
+    doc.build(elems)
+    buf.seek(0)
+    fname = f"Bills_{date.today().strftime('%Y%m%d')}.pdf"
+    log_activity(db, f"Exported {len(bills)} bills as PDF", "bill")
+    return StreamingResponse(buf, media_type="application/pdf",
+                             headers={"Content-Disposition": f'inline; filename="{fname}"'})
+
+
+@app.post("/api/bills/export-excel")
+def export_bills_excel(data: ExportBillsIn, db: Session = Depends(get_db)):
+    """Export filtered bills as Excel (.xlsx)."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    q = db.query(Bill)
+    if data.search:
+        q = q.join(Customer).filter(Customer.full_name.ilike(f"%{data.search}%") |
+                                     Customer.username.ilike(f"%{data.search}%"))
+    if data.month:
+        q = q.filter(Bill.month == data.month)
+    if data.status:
+        q = q.filter(Bill.status == data.status)
+    if data.area:
+        q = q.join(Customer, Bill.customer_id == Customer.id).join(Area, Customer.area_id == Area.id)\
+             .filter(Area.name == data.area)
+    bills = q.order_by(Bill.month.desc()).all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Bills"
+
+    hdr_fill  = PatternFill("solid", fgColor="0D1B2E")
+    hdr_font  = Font(bold=True, color="FFFFFF", size=10)
+    hdr_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin      = Side(style="thin", color="CCCCCC")
+    border    = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    headers = ["#", "Customer Name", "Username", "Mobile", "Area", "Package",
+               "Month", "Pkg Fee", "Extras", "Total", "Paid", "Remaining", "Status",
+               "Due Date", "Paid Date", "Method"]
+    ws.append(headers)
+    for col_idx, _ in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = hdr_fill; cell.font = hdr_font
+        cell.alignment = hdr_align; cell.border = border
+
+    alt_fill = PatternFill("solid", fgColor="F5F7FA")
+    for row_idx, b in enumerate(bills, 2):
+        c = b.customer
+        extras = sum(ch.amount for ch in b.charges)
+        row_data = [
+            row_idx - 1,
+            c.full_name if c else "",
+            c.username if c else "",
+            c.mobile if c else "",
+            c.area_display if c else "",
+            c.package_display if c else "",
+            b.month,
+            round(b.package_fee, 2),
+            round(extras, 2),
+            round(b.total_amount, 2),
+            round(b.amount_paid, 2),
+            round(b.remaining_due(), 2),
+            b.status.title(),
+            str(b.due_date) if b.due_date else "",
+            str(b.paid_date) if b.paid_date else "",
+            b.paid_method or "",
+        ]
+        ws.append(row_data)
+        fill = alt_fill if row_idx % 2 == 0 else None
+        for col_idx in range(1, len(row_data) + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.border = border
+            cell.alignment = Alignment(vertical="center")
+            if fill: cell.fill = fill
+
+    col_widths = [5, 20, 14, 16, 14, 16, 12, 12, 10, 12, 12, 12, 12, 14, 14, 14]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+    ws.row_dimensions[1].height = 24
+
+    ws.append([])
+    ws.append([f"Total Bills: {len(bills)}", "", "", "", "", "", "",
+               round(sum(b.package_fee for b in bills), 2), "",
+               round(sum(b.total_amount for b in bills), 2),
+               round(sum(b.amount_paid for b in bills), 2),
+               round(sum(b.remaining_due() for b in bills), 2)])
+    ws.append([f"Generated: {datetime.now().strftime('%d %b %Y %H:%M')}"])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"Bills_{date.today().strftime('%Y%m%d')}.xlsx"
+    log_activity(db, f"Exported {len(bills)} bills as Excel", "bill")
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+
 @app.post("/api/charges")
 def add_charge(data: ChargeIn, db: Session = Depends(get_db)):
     bill = db.query(Bill).get(data.bill_id)
