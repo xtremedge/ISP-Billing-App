@@ -167,3 +167,18 @@ All API runs on `http://127.0.0.1:8765/api/`
 | GET/PATCH | `/settings` | ISP settings |
 | GET/POST | `/areas` | Manage service areas |
 | GET/POST | `/packages` | Manage packages |
+
+---
+
+## Build + Install (Detailed)
+
+See the full step-by-step guide in:
+
+- `BUILD_INSTALL.md`
+
+It includes:
+
+- Windows and macOS build instructions
+- Installation instructions
+- Troubleshooting checklist
+- User manual PDF output locations

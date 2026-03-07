@@ -1,7 +1,10 @@
 """
-NetPulse ISP Billing — Desktop Application Entry Point
+SS Net ISP Billing — Desktop Application Entry Point
 PyQt6 window embedding a WebEngine that loads the FastAPI + HTML UI.
 """
+import os
+os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu"
+
 import sys
 import time
 import threading
@@ -23,7 +26,7 @@ from app.api.server import start_server, PORT
 from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QDesktopServices
 
-class NetPulsePage(QWebEnginePage):
+class SSNetPage(QWebEnginePage):
     def acceptNavigationRequest(self, url: QUrl, nav_type, is_main_frame):
         href = url.toString()
         # Open external links (WhatsApp, SMS, mailto) in system browser
@@ -111,8 +114,8 @@ class MainWindow(QMainWindow):
         self.move(x, y)
 
         # WebEngine
-        self.profile = QWebEngineProfile("netpulse", self)
-        self.page    = NetPulsePage(self.profile, self)
+        self.profile = QWebEngineProfile("ssnet", self)
+        self.page    = SSNetPage(self.profile, self)
         self.browser = QWebEngineView(self)
         self.browser.setPage(self.page)
 
@@ -152,8 +155,8 @@ def main():
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
     app = QApplication(sys.argv)
-    app.setApplicationName("NetPulse ISP")
-    app.setOrganizationName("NetPulse")
+    app.setApplicationName("SS Net ISP")
+    app.setOrganizationName("SS Net")
 
     # Splash
     splash = SplashScreen()

@@ -2,6 +2,7 @@
 SS Net ISP — SQLAlchemy Database Models (SQLite embedded)
 All tables for the desktop application.
 """
+import re
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
@@ -100,7 +101,9 @@ class Customer(Base):
         return any(b.status in ("unpaid", "partial") for b in self.bills)
 
     def get_mobile_e164(self):
-        m = self.mobile.replace(" ", "").replace("-", "")
+        m = re.sub(r"\D", "", self.mobile or "")
+        if not m:
+            return ""
         if m.startswith("0"):
             m = "92" + m[1:]
         elif not m.startswith("92"):
@@ -279,13 +282,37 @@ class ActivityLog(Base):
                 "icon_type": self.icon_type, "created_at": str(self.created_at)}
 
 
+# ─── ADMIN USER ───────────────────────────────────────────────────────────────
+class AdminUser(Base):
+    __tablename__ = "admin_users"
+    id                = Column(Integer, primary_key=True, default=1)
+    username          = Column(String(100), unique=True, nullable=False, index=True)
+    password_hash     = Column(String(128), nullable=False)
+    password_salt     = Column(String(64), nullable=False)
+    recovery_key_hash = Column(String(128), nullable=False)
+    recovery_key_salt = Column(String(64), nullable=False)
+    created_at        = Column(DateTime, default=datetime.utcnow)
+    updated_at        = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "username": self.username,
+            "created_at": str(self.created_at),
+            "updated_at": str(self.updated_at),
+        }
+
+
 # ─── ISP SETTINGS ─────────────────────────────────────────────────────────────
 class ISPSettings(Base):
     __tablename__ = "isp_settings"
     id                = Column(Integer, primary_key=True, default=1)
-    isp_name          = Column(String(100), default="NetPulse ISP")
+    isp_name          = Column(String(100), default="SS Net ISP")
     isp_contact       = Column(String(50),  default="03001234567")
     isp_address       = Column(Text,        default="")
+    isp_email         = Column(String(100), default="")
+    isp_website       = Column(String(200), default="")
+    isp_city          = Column(String(100), default="")
     reminder_days     = Column(Integer,     default=7)
     reminder_template = Column(Text, default=(
         "Dear {name}, your internet bill of PKR {amount} for package {package} "
@@ -295,25 +322,41 @@ class ISPSettings(Base):
     easypaisa_account = Column(String(50),  default="")
     bank_account      = Column(String(100), default="")
     bank_name         = Column(String(100), default="")
+    theme_bg          = Column(String(20),  default="#0a0e1a")
+    theme_surface     = Column(String(20),  default="#111827")
+    theme_surface2    = Column(String(20),  default="#1a2236")
+    theme_border      = Column(String(20),  default="#1e2d45")
+    theme_accent      = Column(String(20),  default="#00d4ff")
+    theme_accent2     = Column(String(20),  default="#ff6b35")
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def to_dict(self):
         return {"isp_name": self.isp_name, "isp_contact": self.isp_contact,
-                "isp_address": self.isp_address, "reminder_days": self.reminder_days,
+                "isp_address": self.isp_address,
+                "isp_email": self.isp_email or "",
+                "isp_website": self.isp_website or "",
+                "isp_city": self.isp_city or "",
+                "reminder_days": self.reminder_days,
                 "reminder_template": self.reminder_template,
                 "jazzcash_account": self.jazzcash_account or "",
                 "easypaisa_account": self.easypaisa_account or "",
                 "bank_account": self.bank_account or "",
-                "bank_name": self.bank_name or ""}
+                "bank_name": self.bank_name or "",
+                "theme_bg": self.theme_bg or "#0a0e1a",
+                "theme_surface": self.theme_surface or "#111827",
+                "theme_surface2": self.theme_surface2 or "#1a2236",
+                "theme_border": self.theme_border or "#1e2d45",
+                "theme_accent": self.theme_accent or "#00d4ff",
+                "theme_accent2": self.theme_accent2 or "#ff6b35"}
 
 
 # ─── DATABASE ENGINE ──────────────────────────────────────────────────────────
 def get_db_path():
     """Store SQLite DB in user's home directory so data persists across updates."""
     home = os.path.expanduser("~")
-    data_dir = os.path.join(home, ".netpulse")
+    data_dir = os.path.join(home, ".ssnet")
     os.makedirs(data_dir, exist_ok=True)
-    return os.path.join(data_dir, "netpulse.db")
+    return os.path.join(data_dir, "ssnet.db")
 
 
 DB_PATH  = get_db_path()
@@ -327,9 +370,32 @@ def _ensure_columns():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     existing = {row[1] for row in cur.execute("PRAGMA table_info(isp_settings)").fetchall()}
-    for col in ("jazzcash_account", "easypaisa_account", "bank_account", "bank_name"):
+    for col in (
+        "jazzcash_account",
+        "easypaisa_account",
+        "bank_account",
+        "bank_name",
+        "isp_email",
+        "isp_website",
+        "isp_city",
+        "theme_bg",
+        "theme_surface",
+        "theme_surface2",
+        "theme_border",
+        "theme_accent",
+        "theme_accent2",
+    ):
         if col not in existing:
-            cur.execute(f"ALTER TABLE isp_settings ADD COLUMN {col} TEXT DEFAULT ''")
+            defaults = {
+                "theme_bg": "#0a0e1a",
+                "theme_surface": "#111827",
+                "theme_surface2": "#1a2236",
+                "theme_border": "#1e2d45",
+                "theme_accent": "#00d4ff",
+                "theme_accent2": "#ff6b35",
+            }
+            default_val = defaults.get(col, "")
+            cur.execute(f"ALTER TABLE isp_settings ADD COLUMN {col} TEXT DEFAULT '{default_val}'")
     conn.commit()
     conn.close()
 

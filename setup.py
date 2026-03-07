@@ -13,7 +13,7 @@ def run(cmd, check=True):
 
 def main():
     print("\n" + "═"*55)
-    print("  📡  NetPulse ISP — Setup")
+    print("  📡  SS Net ISP — Setup")
     print("═"*55 + "\n")
 
     # Install dependencies
@@ -29,7 +29,7 @@ def main():
     print("═"*55 + "\n")
     print("  📂  Your data is stored at:")
     home = os.path.expanduser("~")
-    print(f"      {os.path.join(home, '.netpulse', 'netpulse.db')}")
+    print(f"      {os.path.join(home, '.ssnet', 'ssnet.db')}")
     print()
 
     choice = input("  Launch the app now? (y/n): ").strip().lower()
