@@ -1249,6 +1249,30 @@
       font-size: 12.5px;
       flex: 1
     }
+
+    /* GUEST MODE RULES */
+    body.is-guest [onclick="openAddCharge()"],
+    body.is-guest [onclick*="mGenBills"],
+    body.is-guest [onclick="openNewCust()"],
+    body.is-guest [onclick*="bulkDeleteSelected"],
+    body.is-guest [onclick="sendAllOverdueReminders()"],
+    body.is-guest [onclick="openNewPackage()"],
+    body.is-guest [onclick="addArea()"],
+    body.is-guest [onclick="openSettings()"],
+    body.is-guest [onclick="nav('import')"],
+    body.is-guest [onclick="nav('reminders')"],
+    body.is-guest [onclick="nav('packages')"],
+    body.is-guest [onclick="nav('areas')"],
+    body.is-guest [onclick^="edit"],
+    body.is-guest [onclick^="delete"],
+    body.is-guest [onclick^="openRmFor"],
+    body.is-guest [onclick^="openPayFor"],
+    body.is-guest [onclick^="openEdit"],
+    body.is-guest .cb-th,
+    body.is-guest .cb-td,
+    body.is-guest .sel-bar {
+      display: none !important;
+    }
   </style>
 </head>
 
@@ -1280,7 +1304,10 @@
             onkeypress="if(event.key==='Enter') loginAdmin()"></div>
         <div class="fg"><label>Password</label><input type="password" id="alPass"
             onkeypress="if(event.key==='Enter') loginAdmin()"></div>
-        <button type="button" class="btn btn-p" style="width:100%;margin-top:8px" onclick="loginAdmin()">Login</button>
+        <button type="button" class="btn btn-p" style="width:100%;margin-top:8px" onclick="loginAdmin()">Login as
+          Admin</button>
+        <button type="button" class="btn btn-o" style="width:100%;margin-top:8px" onclick="doGuestLogin()">Login as
+          Guest (View Only)</button>
       </div>
 
       <div id="authPanelForgot" style="display:none">
@@ -1647,7 +1674,10 @@
     </nav>
     <div class="sidebar-foot">
       <div style="font-size:11.5px;color:var(--text2)"><span class="sdot"></span>System Active</div>
-      <div style="display:flex;gap:7px;margin-top:9px">
+      <div id="devLogoBox" style="margin-top:4px">
+        <div style="font-size:10px;color:var(--text2)">Developed by SS Net</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:9px">
         <button type="button" class="btn btn-w btn-xs" onclick="openWalkthrough(true)">Guide</button>
         <button type="button" class="btn btn-o btn-xs" onclick="openSettings()">⚙️ Settings</button>
         <button type="button" class="btn btn-d btn-xs" onclick="logoutAdmin()">Logout</button>
@@ -2432,7 +2462,19 @@
       const r = await POST('/auth/login', { username, password });
       if (!r?.ok || !r.token) { setAuthMessage('Invalid username or password.', 'err'); return; }
       setAuthToken(r.token);
+      localStorage.setItem('ssnet_username', username);
       location.reload();
+    }
+
+    async function doGuestLogin() {
+      const r = await POST('/auth/guest', {});
+      if (r?.ok && r.token) {
+        setAuthToken(r.token);
+        localStorage.setItem('ssnet_username', r.username);
+        location.reload();
+      } else {
+        setAuthMessage('Guest login failed.', 'err');
+      }
     }
 
     async function recoverAdminUsername() {
@@ -2681,6 +2723,14 @@
       return /^#[0-9a-fA-F]{6}$/.test((v || '').trim()) ? v.trim() : fb;
     }
 
+    const U_GUEST = localStorage.getItem('ssnet_username') === 'guest';
+
+    function initGuestMode() {
+      if (U_GUEST) {
+        document.body.classList.add('is-guest');
+      }
+    }
+
     function applyThemeFromSettings(s = {}) {
       const root = document.documentElement;
       root.style.setProperty('--bg', _hex(s.theme_bg, '#0a0e1a'));
@@ -2717,6 +2767,17 @@
         if (state) state.textContent = 'No custom logo uploaded yet.';
         box.classList.remove('has-logo');
       }
+    }
+
+    function initDevLogo() {
+      const img = new Image();
+      img.onload = () => {
+        const box = document.getElementById('devLogoBox');
+        if (box) {
+          box.innerHTML = `<img src="developer_logo.png?v=${Date.now()}" style="height:18px;object-fit:contain;opacity:0.6;margin-top:2px;" alt="Developer Logo">`;
+        }
+      };
+      img.src = 'developer_logo.png';
     }
 
     async function uploadBrandLogo() {
@@ -3559,9 +3620,9 @@
         alert_('Error', 'All fields (Username, Full Name, Mobile, Package, Area, Expiry Date) are required.', 'warn');
         return;
       }
-      // Auto-generate serial number for new customer
+      // Auto-generate serial number for new customer if empty
       let sr_no = document.getElementById('cfSrNo').value.trim();
-      if (!id) {
+      if (!id && !sr_no) {
         const customers = await GET('/customers');
         const maxSr = customers && customers.length ? Math.max(...customers.map(c => parseInt(c.sr_no) || 0)) : 0;
         sr_no = (maxSr + 1).toString();
@@ -3680,6 +3741,8 @@
     async function init() {
       const authed = await syncAuthState();
       if (!authed) return;
+      initGuestMode();
+      initDevLogo();
       const s = await GET('/settings'); if (s) isp = s;
       applyThemeFromSettings(isp);
       refreshBrandHeader();

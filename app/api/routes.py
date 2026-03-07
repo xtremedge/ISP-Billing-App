@@ -58,6 +58,7 @@ _AUTH_PUBLIC_PATHS = {
     "/api/auth/logout",
     "/api/auth/recover-username",
     "/api/auth/reset-password",
+    "/api/auth/guest",
 }
 
 
@@ -148,6 +149,9 @@ async def auth_guard(request: Request, call_next):
     username = _validate_auth_token(_get_token_from_request(request))
     if not username:
         return JSONResponse(status_code=401, content={"detail": "Unauthorized. Please login."})
+
+    if username == "guest" and request.method not in ("GET", "OPTIONS"):
+        return JSONResponse(status_code=403, content={"detail": "Guest users have read-only access."})
 
     request.state.admin_username = username
     return await call_next(request)
@@ -361,6 +365,17 @@ def auth_logout(request: Request):
     return {"ok": True}
 
 
+@app.post("/api/auth/guest")
+def auth_guest():
+    token = _issue_auth_token("guest")
+    return {
+        "ok": True,
+        "token": token,
+        "username": "guest",
+        "expires_in": _AUTH_TTL_SECONDS,
+    }
+
+
 @app.post("/api/auth/recover-username")
 def recover_username(data: RecoverUsernameIn, db: Session = Depends(get_db)):
     admin = db.query(AdminUser).first()
@@ -438,6 +453,32 @@ def _logo_img(s: ISPSettings, width: float = 2.6 * cm) -> Optional[RLImage]:
         w, h = pil.size
         ratio = h / w
         return RLImage(logo_path, width=width, height=width * ratio)
+    return None
+
+def _dev_logo_path() -> str:
+    from pathlib import Path
+    p = os.path.join(str(Path(__file__).resolve().parent.parent), "static", "developer_logo.png")
+    if os.path.exists(p):
+        return p
+    return os.path.join(os.getcwd(), "app", "static", "developer_logo.png")
+
+def _dev_logo_img(max_width: float = 4.0 * cm, max_height: float = 1.0 * cm) -> Optional[RLImage]:
+    p = _dev_logo_path()
+    if os.path.exists(p):
+        try:
+            from PIL import Image as PILImage
+            pil = PILImage.open(p)
+            w, h = pil.size
+            ratio = h / w
+            draw_height = max_width * ratio
+            if draw_height > max_height:
+                draw_height = max_height
+                draw_width = max_height / ratio
+            else:
+                draw_width = max_width
+            return RLImage(p, width=draw_width, height=draw_height)
+        except Exception:
+            pass
     return None
 
 
@@ -851,6 +892,14 @@ def build_bill_pdf(bill: Bill, s: ISPSettings) -> io.BytesIO:
     contact_join = " | ".join(_isp_info_lines(s))
     if contact_join:
         elems.append(Paragraph(contact_join, sty("isp_footer_contact", fontSize=7, alignment=TA_RIGHT)))
+    
+    elems.append(Spacer(1, 0.1 * cm))
+    dev_img = _dev_logo_img(max_width=4.0 * cm, max_height=0.8 * cm)
+    if dev_img:
+        dev_img.hAlign = 'CENTER'
+        elems.append(dev_img)
+    else:
+        elems.append(Paragraph("Developed by SS Net", sty("isp_footer_dev", fontSize=7, textColor=colors.HexColor("#bbbbbb"), alignment=TA_CENTER)))
     doc.build(elems)
     buf.seek(0)
     return buf
@@ -984,6 +1033,14 @@ def build_customers_export_pdf(customers: list, s: ISPSettings,
         f"{s.isp_name}  |  {s.isp_contact}  |  {s.isp_address}  |  "
         f"Printed: {datetime.now().strftime('%d %b %Y %H:%M')}",
         S_FOOT))
+
+    elems.append(Spacer(1, 0.1 * cm))
+    dev_img = _dev_logo_img(max_width=4.0 * cm, max_height=0.8 * cm)
+    if dev_img:
+        dev_img.hAlign = 'CENTER'
+        elems.append(dev_img)
+    else:
+        elems.append(Paragraph("Developed by SS Net", sty("isp_footer_dev", fontSize=7, textColor=colors.HexColor("#bbbbbb"), alignment=TA_CENTER)))
 
     doc.build(elems)
     buf.seek(0)
@@ -1179,6 +1236,14 @@ def build_revenue_report_pdf(report: dict, s: ISPSettings) -> io.BytesIO:
 
         elems.append(Paragraph("<b>Payment Method Breakdown</b>", S_TXT))
         elems.append(Table([[pie_d, method_tbl]], colWidths=[9.2 * cm, 7.8 * cm]))
+
+    elems.append(Spacer(1, 0.4 * cm))
+    dev_img = _dev_logo_img(max_width=4.0 * cm, max_height=0.8 * cm)
+    if dev_img:
+        dev_img.hAlign = 'CENTER'
+        elems.append(dev_img)
+    else:
+        elems.append(Paragraph("Developed by SS Net", ParagraphStyle("ft", fontSize=7.5, textColor=colors.HexColor("#bbbbbb"), alignment=TA_CENTER)))
 
     doc.build(elems)
     buf.seek(0)

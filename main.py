@@ -14,10 +14,11 @@ import sys
 import time
 import threading
 import requests
+import shutil
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout,
-    QSplashScreen, QLabel, QProgressBar
+    QSplashScreen, QLabel, QProgressBar, QMessageBox, QFileDialog
 )
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineSettings, QWebEngineProfile, QWebEnginePage
@@ -43,7 +44,7 @@ class SSNetPage(QWebEnginePage):
 
 # ─── SPLASH SCREEN ───────────────────────────────────────────────────────────
 class SplashScreen(QSplashScreen):
-    def __init__(self):
+    def __init__(self, base_path):
         # Create a gradient splash pixmap
         pix = QPixmap(520, 300)
         pix.fill(QColor("#0a0e1a"))
@@ -77,6 +78,19 @@ class SplashScreen(QSplashScreen):
         f3 = QFont("Arial", 11)
         painter.setFont(f3)
         painter.drawText(0, 235, 520, 30, Qt.AlignmentFlag.AlignCenter, "Billing Management System")
+
+        # Branding
+        dev_logo_path = os.path.join(base_path, "app", "static", "developer_logo.png")
+        if os.path.exists(dev_logo_path):
+            logo_pix = QPixmap(dev_logo_path)
+            logo_pix = logo_pix.scaledToHeight(30, Qt.TransformationMode.SmoothTransformation)
+            x_pos = (520 - logo_pix.width()) // 2
+            painter.drawPixmap(x_pos, 280, logo_pix)
+        else:
+            painter.setPen(QColor("#556073"))
+            f4 = QFont("Arial", 9)
+            painter.setFont(f4)
+            painter.drawText(0, 280, 520, 20, Qt.AlignmentFlag.AlignCenter, "Developed by SS Net")
 
         painter.end()
         super().__init__(pix)
@@ -163,8 +177,30 @@ def main():
     app.setApplicationName("SS Net ISP")
     app.setOrganizationName("SS Net")
 
+    # DB First-Run Setup
+    home = os.path.expanduser("~")
+    data_dir = os.path.join(home, ".ssnet")
+    db_path = os.path.join(data_dir, "ssnet.db")
+
+    if not os.path.exists(db_path):
+        os.makedirs(data_dir, exist_ok=True)
+        msgBox = QMessageBox()
+        msgBox.setWindowTitle("Welcome to SS Net ISP")
+        msgBox.setText("No existing database found.\nWould you like to start a fresh database or restore from a backup?")
+        
+        btn_fresh = msgBox.addButton("Start Fresh", QMessageBox.ButtonRole.AcceptRole)
+        btn_restore = msgBox.addButton("Restore Backup", QMessageBox.ButtonRole.ActionRole)
+        msgBox.exec()
+        
+        if msgBox.clickedButton() == btn_restore:
+            file_name, _ = QFileDialog.getOpenFileName(
+                None, "Select Backup Database", "", "SQLite DB (*.db);;All Files (*)"
+            )
+            if file_name and os.path.exists(file_name):
+                shutil.copy2(file_name, db_path)
+
     # Splash
-    splash = SplashScreen()
+    splash = SplashScreen(base_path)
     splash.show()
     splash.set_progress(5, "Initializing database...")
     QApplication.processEvents()
